@@ -1,0 +1,252 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Postal ID Verification API",
+    "description": "Validates Postal Identification cards against the enrollment database.\n\n## How a verification works\nSubmit the details printed on a card. The service answers `VALID` when\na matching record exists, has not been deleted, has reached an issued\nstatus, and the name and date of birth agree. Otherwise it answers\n`INVALID`.\n\n## What INVALID does not tell you\nEvery failing case returns the same body. The API will not say whether\na reference number exists or which field was wrong. This is deliberate:\na more helpful answer would let the endpoint be used to harvest\npersonal data belonging to other people.\n\n## Images\nA `VALID` response includes short-lived references to the cardholder's\nphotograph and signature. They expire within minutes and permit only a\nfew fetches. Fingerprints and supporting document scans are held in the\ndatabase but are not retrievable through this API under any scope.\n\n## Rate limits\nRequests are budgeted per client and per source address. Exceeding a\nbudget returns `429` with a `Retry-After` header.\n",
+    "contact": {
+      "name": "Postal ID Verification Service"
+    },
+    "license": {
+      "name": "Internal use"
+    },
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8080",
+      "description": "Postal ID verification service"
+    }
+  ],
+  "security": [
+    {
+      "oauth2-client-credentials": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "Verification",
+      "description": "Validate a Postal ID against the enrollment database"
+    },
+    {
+      "name": "Images",
+      "description": "Retrieve cardholder photo and signature for a verified record"
+    }
+  ],
+  "paths": {
+    "/api/v1/verify": {
+      "post": {
+        "tags": [
+          "Verification"
+        ],
+        "summary": "Verify a Postal ID",
+        "description": "Checks the submitted details against the enrollment record identified by the\npostal reference number, and answers VALID or INVALID.\n\nVALID requires all of: a record with that reference number exists, it is not\ndeleted, it has reached an issued status, and the surname, first name, middle\nname and date of birth all match.\n\nEvery unsuccessful case produces the same INVALID body. The endpoint will not\nreveal whether the reference number exists or which field failed, because that\nwould make it usable for harvesting other people's details.\n\nOn VALID the response carries short-lived relative URLs for the cardholder's\nphotograph and signature. Fetching them needs the postalid.images scope.\n",
+        "operationId": "verify",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Verification completed. Inspect `result` for the answer.",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerifyResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request body failed validation."
+          },
+          "401": {
+            "description": "Missing, expired or invalid access token."
+          },
+          "403": {
+            "description": "Token lacks the postalid.verify scope."
+          },
+          "429": {
+            "description": "Rate limit exceeded; see the Retry-After header."
+          }
+        },
+        "security": [
+          {
+            "oauth2-client-credentials": [
+              "postalid.verify"
+            ]
+          }
+        ]
+      }
+    },
+    "/api/v1/images/{reference}": {
+      "get": {
+        "tags": [
+          "Images"
+        ],
+        "summary": "Fetch a cardholder image",
+        "description": "Streams the photograph or signature behind a reference returned by a VALID\nverification.\n\nReferences expire a few minutes after they are issued and allow only a small\nnumber of fetches. Signatures and scans are held as TIFF, which browsers cannot\ndisplay, so they are converted to PNG on the way out; the JPEG photograph is\nserved as captured. Read the Content-Type header rather than assuming a format.\n\nOnly photographs and signatures can ever be referenced. Fingerprints and\nsupporting document scans are stored but not reachable through this API.\n",
+        "operationId": "fetch",
+        "parameters": [
+          {
+            "name": "reference",
+            "in": "path",
+            "description": "Opaque reference from a VALID verification response",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Image bytes, as image/png or image/jpeg",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "string",
+                  "format": "byte"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired or invalid access token"
+          },
+          "403": {
+            "description": "Token lacks the postalid.images scope"
+          },
+          "404": {
+            "description": "Reference is unknown, expired or exhausted"
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        },
+        "security": [
+          {
+            "oauth2-client-credentials": [
+              "postalid.images"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "VerifyRequest": {
+        "type": "object",
+        "description": "Details transcribed from a Postal ID card",
+        "properties": {
+          "postalRefNo": {
+            "type": "string",
+            "description": "Postal reference number printed on the card",
+            "example": "A11230000001",
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9]{8,20}$"
+          },
+          "firstName": {
+            "type": "string",
+            "description": "Given name as printed on the card",
+            "example": "JUAN",
+            "maxLength": 120,
+            "minLength": 0,
+            "pattern": "^[\\p{L}\\p{M}][\\p{L}\\p{M} .'\\-]*$"
+          },
+          "middleName": {
+            "type": "string",
+            "description": "Middle name or initial; omit if the card shows none",
+            "example": "SANTOS",
+            "maxLength": 120,
+            "minLength": 0,
+            "pattern": "^$|^[\\p{L}\\p{M}][\\p{L}\\p{M} .'\\-]*$"
+          },
+          "lastName": {
+            "type": "string",
+            "description": "Surname as printed on the card",
+            "example": "DELA CRUZ",
+            "maxLength": 120,
+            "minLength": 0,
+            "pattern": "^[\\p{L}\\p{M}][\\p{L}\\p{M} .'\\-]*$"
+          },
+          "dateOfBirth": {
+            "type": "string",
+            "format": "date",
+            "description": "Date of birth in ISO-8601 form",
+            "example": "1990-01-31"
+          }
+        },
+        "required": [
+          "dateOfBirth",
+          "firstName",
+          "lastName",
+          "postalRefNo"
+        ]
+      },
+      "VerifyResponse": {
+        "type": "object",
+        "description": "Outcome of a Postal ID verification",
+        "properties": {
+          "result": {
+            "type": "string",
+            "description": "VALID when the details match an issued Postal ID, INVALID otherwise",
+            "enum": [
+              "VALID",
+              "INVALID"
+            ],
+            "example": "VALID"
+          },
+          "verifiedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the check ran",
+            "example": "2026-08-18T04:21:07Z"
+          },
+          "requestId": {
+            "type": "string",
+            "description": "Correlation id, also written to the audit trail; quote it in support requests",
+            "example": "0f4b7c2e-6d1a-4f83-9c55-2a1f9e0b77d1"
+          },
+          "images": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Present only on VALID. Relative URLs for the cardholder's photo and signature, each usable for a short window.",
+            "example": {
+              "photo": "/api/v1/images/xY3...",
+              "signature": "/api/v1/images/8Kq..."
+            }
+          },
+          "imagesExpireIn": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Present only on VALID. Seconds until the image URLs stop working.",
+            "example": 300
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "oauth2-client-credentials": {
+        "type": "oauth2",
+        "description": "OAuth 2.0 client credentials. Request a token from the token endpoint using\nyour client id and secret over HTTP Basic, then send it as a bearer token.\nTokens are short-lived; request a new one rather than caching indefinitely.\n",
+        "flows": {
+          "clientCredentials": {
+            "tokenUrl": "http://localhost:8080/oauth2/token",
+            "scopes": {
+              "postalid.verify": "Submit Postal ID verification requests",
+              "postalid.images": "Retrieve the photo and signature of a verified cardholder"
+            }
+          }
+        }
+      }
+    }
+  }
+}

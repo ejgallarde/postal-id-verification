@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Something went wrong')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: header}"></header>
+
+<main class="wrap">
+  <div class="card">
+    <h1 th:text="${status} ?: 'Error'">Error</h1>
+    <!-- Status and nothing else. The exception message can name internals. -->
+    <p th:text="${error} ?: 'The request could not be completed.'">
+      The request could not be completed.
+    </p>
+    <div class="actions">
+      <a class="btn btn-primary" th:href="@{/}">Back to verification</a>
+    </div>
+  </div>
+</main>
+
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>

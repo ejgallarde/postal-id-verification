@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<!--
+  Shared page chrome. Pages call th:replace on these fragments rather than pulling in a layout
+  dialect, which keeps the dependency list short for a UI this small.
+-->
+<head th:fragment="head(title)">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Result pages name a specific person; keep them out of history caches. -->
+  <meta http-equiv="Cache-Control" content="no-store">
+  <title th:text="${title}">Postal ID Verification</title>
+  <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+
+<body>
+<header th:fragment="header" class="site-header">
+  <div class="wrap header-inner">
+    <a class="brand" th:href="@{/}">
+      <span class="brand-mark" aria-hidden="true">PID</span>
+      <span class="brand-text">Postal ID Verification</span>
+    </a>
+    <form th:action="@{/logout}" method="post" class="logout-form"
+          th:if="${#authorization.expression('isAuthenticated()')}">
+      <span class="operator" th:text="${#authentication.name}">operator</span>
+      <button type="submit" class="btn btn-quiet">Sign out</button>
+    </form>
+  </div>
+</header>
+
+<footer th:fragment="footer" class="site-footer">
+  <div class="wrap">
+    <p>
+      Verification results and cardholder images are personal data. Every check is recorded
+      against your account.
+    </p>
+  </div>
+</footer>
+</body>
+</html>

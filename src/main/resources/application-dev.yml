@@ -1,0 +1,51 @@
+# Local development only.
+#
+# The credentials below are well-known placeholders and exist so a fresh checkout runs. They are
+# fine on a laptop and unacceptable anywhere else: the dev profile must never be active on a
+# deployed instance. Production supplies every one of these through the environment.
+
+spring:
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+  thymeleaf:
+    cache: false
+
+server:
+  ssl:
+    # Off by default so `mvn spring-boot:run -Dspring-boot.run.profiles=dev` works with no setup.
+    # See README for generating a dev keystore and turning it on.
+    enabled: ${POSTALID_SSL_ENABLED:false}
+  port: ${SERVER_PORT:8080}
+  servlet:
+    session:
+      cookie:
+        # Plain HTTP locally, so a secure-only cookie would never be sent back.
+        secure: false
+
+logging:
+  level:
+    com.postalid.verification: DEBUG
+
+postalid:
+  audit:
+    prn-hash-pepper: dev-only-pepper-not-for-production
+
+  oauth:
+    issuer: ${POSTALID_ISSUER:http://localhost:8080}
+    clients:
+      postalid-demo-client:
+        name: Local demo client
+        secret: dev-only-secret-change-me
+        scopes:
+          - postalid.verify
+          - postalid.images
+
+  web:
+    # Convenient locally: Swagger UI opens without signing in first.
+    public-api-docs: true
+    operators:
+      operator:
+        password: dev-only-password

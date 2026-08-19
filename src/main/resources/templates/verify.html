@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Verify a Postal ID')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: header}"></header>
+
+<main class="wrap">
+  <h1>Verify a Postal ID</h1>
+  <p class="lede">
+    Enter the details exactly as they appear on the card. All fields except the middle name are
+    required.
+  </p>
+
+  <div class="alert alert-error" th:if="${#fields.hasErrors('${form.*}')}" role="alert">
+    <strong>Check the form.</strong>
+    <ul>
+      <li th:each="err : ${#fields.errors('form.*')}" th:text="${err}">Error</li>
+    </ul>
+  </div>
+
+  <form th:action="@{/verify}" th:object="${form}" method="post" class="card form" autocomplete="off">
+
+    <div class="field">
+      <label for="postalRefNo">ID number</label>
+      <input type="text" id="postalRefNo" th:field="*{postalRefNo}"
+             maxlength="20" pattern="[A-Za-z0-9]{8,20}" spellcheck="false"
+             aria-describedby="postalRefNoHelp" required>
+      <small id="postalRefNoHelp" class="help">
+        The postal reference number printed on the card: 8&ndash;20 letters or digits.
+      </small>
+      <p class="field-error" th:if="${#fields.hasErrors('postalRefNo')}"
+         th:errors="*{postalRefNo}">error</p>
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label for="firstName">First name</label>
+        <input type="text" id="firstName" th:field="*{firstName}" maxlength="120" required>
+        <p class="field-error" th:if="${#fields.hasErrors('firstName')}"
+           th:errors="*{firstName}">error</p>
+      </div>
+
+      <div class="field">
+        <label for="middleName">Middle name <span class="optional">optional</span></label>
+        <input type="text" id="middleName" th:field="*{middleName}" maxlength="120"
+               aria-describedby="middleNameHelp">
+        <small id="middleNameHelp" class="help">A single initial is accepted.</small>
+        <p class="field-error" th:if="${#fields.hasErrors('middleName')}"
+           th:errors="*{middleName}">error</p>
+      </div>
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label for="lastName">Surname</label>
+        <input type="text" id="lastName" th:field="*{lastName}" maxlength="120" required>
+        <p class="field-error" th:if="${#fields.hasErrors('lastName')}"
+           th:errors="*{lastName}">error</p>
+      </div>
+
+      <div class="field">
+        <label for="dateOfBirth">Date of birth</label>
+        <input type="date" id="dateOfBirth" th:field="*{dateOfBirth}" required>
+        <p class="field-error" th:if="${#fields.hasErrors('dateOfBirth')}"
+           th:errors="*{dateOfBirth}">error</p>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button type="submit" class="btn btn-primary">Verify</button>
+      <button type="reset" class="btn btn-quiet">Clear</button>
+    </div>
+  </form>
+</main>
+
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>

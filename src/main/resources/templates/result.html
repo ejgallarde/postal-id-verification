@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Verification result')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: header}"></header>
+
+<main class="wrap">
+
+  <!-- VALID -->
+  <div th:if="${valid}">
+    <div class="verdict verdict-valid" role="status">
+      <span class="verdict-icon" aria-hidden="true">&#10003;</span>
+      <div>
+        <h1>VALID</h1>
+        <p>These details match an issued Postal ID record.</p>
+      </div>
+    </div>
+
+    <section class="card">
+      <h2>Captured at enrollment</h2>
+      <p class="lede">
+        Compare these against the card and the person in front of you.
+      </p>
+
+      <div class="images">
+        <figure th:if="${photoRef}">
+          <img th:src="@{'/ui/images/' + ${photoRef}}" alt="Cardholder photograph captured at enrollment">
+          <figcaption>Photograph</figcaption>
+        </figure>
+        <figure th:if="${signatureRef}" class="signature">
+          <img th:src="@{'/ui/images/' + ${signatureRef}}" alt="Cardholder signature captured at enrollment">
+          <figcaption>Signature</figcaption>
+        </figure>
+      </div>
+
+      <p class="note" th:unless="${photoRef} or ${signatureRef}">
+        No photograph or signature was captured with this record.
+      </p>
+
+      <p class="note">
+        These images stop loading about
+        <span th:text="${#numbers.formatInteger(expiresInSeconds / 60, 1)}">5</span>
+        minute(s) after the check. Run the verification again if you need another look.
+      </p>
+    </section>
+  </div>
+
+  <!-- INVALID: says nothing about which field failed, or whether the ID number exists at all. -->
+  <div th:unless="${valid}">
+    <div class="verdict verdict-invalid" role="status">
+      <span class="verdict-icon" aria-hidden="true">&#10007;</span>
+      <div>
+        <h1>INVALID</h1>
+        <p>These details do not match an issued Postal ID record.</p>
+      </div>
+    </div>
+
+    <section class="card">
+      <h2>What this means</h2>
+      <p>
+        No further detail is available, by design. Re-check the entry against the card &mdash; a
+        transposed digit in the ID number or a date of birth typed in the wrong order is the usual
+        cause.
+      </p>
+    </section>
+  </div>
+
+  <div class="actions">
+    <a class="btn btn-primary" th:href="@{/}">Verify another</a>
+  </div>
+
+  <p class="request-id">
+    Reference <code th:text="${requestId}">request-id</code>
+  </p>
+</main>
+
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>

@@ -1,0 +1,25 @@
+# PostgreSQL target.
+#
+# Two things are needed besides this file:
+#   1. Uncomment the postgresql and flyway-database-postgresql dependencies in pom.xml.
+#   2. Run with: --spring.profiles.active=postgres
+#
+# Flyway picks up db/migration/postgresql/V5 automatically through the {vendor} segment of
+# spring.flyway.locations, so the OAuth schema arrives with timestamptz and text columns rather
+# than the H2 flavour. V1-V4 and V6-V7 are shared and portable.
+
+spring:
+  datasource:
+    url: ${POSTALID_DB_URL:jdbc:postgresql://localhost:5432/postalid}
+    driver-class-name: org.postgresql.Driver
+    username: ${POSTALID_DB_USERNAME}
+    password: ${POSTALID_DB_PASSWORD}
+    hikari:
+      maximum-pool-size: ${POSTALID_DB_POOL_SIZE:10}
+      # Fail fast rather than queueing requests behind an unreachable database.
+      connection-timeout: 5000
+
+  jpa:
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect

@@ -1,0 +1,133 @@
+spring:
+  application:
+    name: postal-id-verification
+
+  datasource:
+    # File-based H2. Portable ANSI SQL migrations mean switching to PostgreSQL is a datasource
+    # change plus the driver dependency; see application-postgres.yml.
+    # AUTO_SERVER lets a second process (an external SQL client) attach while the app is running.
+    # H2 rejects it alongside DB_CLOSE_ON_EXIT, so that one is left at its default.
+    url: jdbc:h2:file:./data/postalid;AUTO_SERVER=TRUE
+    driver-class-name: org.h2.Driver
+    username: ${POSTALID_DB_USERNAME:sa}
+    password: ${POSTALID_DB_PASSWORD:}
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      # Flyway owns the schema. Hibernate only validates that the mapping agrees with it, so a
+      # drifted entity fails at startup instead of silently reading the wrong column.
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+
+  flyway:
+    enabled: true
+    # db/migration holds the portable migrations. The OAuth schema's column types are not
+    # portable, so its two flavours live under db/vendor, outside the recursive scan of
+    # db/migration — Flyway would otherwise find both copies of V5 and refuse to start.
+    locations: classpath:db/migration,classpath:db/vendor/{vendor}
+
+  threads:
+    virtual:
+      enabled: true
+
+server:
+  port: ${SERVER_PORT:8443}
+  ssl:
+    enabled: ${POSTALID_SSL_ENABLED:true}
+    key-store: ${POSTALID_SSL_KEYSTORE:classpath:keystore/postalid-dev.p12}
+    key-store-type: PKCS12
+    key-store-password: ${POSTALID_SSL_KEYSTORE_PASSWORD:}
+    key-alias: ${POSTALID_SSL_KEY_ALIAS:postalid}
+  error:
+    # An error page that quotes the exception is an information leak.
+    include-message: never
+    include-stacktrace: never
+    include-binding-errors: never
+  servlet:
+    session:
+      cookie:
+        http-only: true
+        secure: true
+        same-site: strict
+      timeout: 30m
+
+management:
+  endpoints:
+    web:
+      exposure:
+        # Health only. Everything else about a service holding personal data stays shut.
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+    tags-sorter: alpha
+
+logging:
+  level:
+    root: INFO
+    com.postalid.verification: INFO
+    # Logs SQL statements, not parameters; parameter logging would print names and reference
+    # numbers straight into the log file.
+    org.hibernate.SQL: WARN
+
+postalid:
+  verify:
+    # A record must have reached one of these before it counts as an issued card.
+    issued-statuses:
+      - CDE
+    allow-middle-initial: true
+    allow-middle-name-omission: false
+
+  media:
+    token-ttl: 5m
+    token-max-uses: 5
+    max-image-pixels: 40000000
+
+  storage:
+    # Holds extracted personal data; keep outside the repository and back it up accordingly.
+    root: ${POSTALID_STORAGE_ROOT:./data/blobstore}
+
+  ingest:
+    source-dir: ${POSTALID_INGEST_DIR:./files}
+    fail-fast: false
+
+  rate-limit:
+    enabled: true
+    verify-per-client-per-minute: 60
+    verify-per-ip-per-minute: 20
+    image-per-client-per-minute: 120
+    invalid-burst-threshold: 20
+    invalid-lookback: 10m
+    invalid-penalty: 5m
+
+  audit:
+    # Startup fails while this is unset or left at the placeholder.
+    prn-hash-pepper: ${POSTALID_AUDIT_PRN_HASH_PEPPER:CHANGE-ME}
+
+  oauth:
+    access-token-ttl: 5m
+    audience: postal-id-verification-api
+    issuer: ${POSTALID_ISSUER:}
+    jwk:
+      keystore-location: ${POSTALID_JWT_KEYSTORE:}
+      keystore-password: ${POSTALID_JWT_KEYSTORE_PASSWORD:}
+      key-alias: ${POSTALID_JWT_KEY_ALIAS:postalid-jwt}
+    # Declare clients per environment. Secrets come from the environment, never from a
+    # committed file.
+    clients: {}
+
+  web:
+    operators: {}

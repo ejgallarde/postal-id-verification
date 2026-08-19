@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Sign in')}"></head>
+<body class="centered">
+
+<main class="wrap narrow">
+  <div class="card">
+    <h1>Postal ID Verification</h1>
+    <p class="lede">Sign in to run a verification.</p>
+
+    <!-- Deliberately vague: naming which of the two was wrong helps an attacker enumerate users. -->
+    <div class="alert alert-error" th:if="${param.error}" role="alert">
+      Incorrect username or password.
+    </div>
+    <div class="alert alert-info" th:if="${param.loggedOut}" role="status">
+      You have been signed out.
+    </div>
+
+    <form th:action="@{/login}" method="post" class="form">
+      <div class="field">
+        <label for="username">Username</label>
+        <input type="text" id="username" name="username" autocomplete="username" required autofocus>
+      </div>
+      <div class="field">
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" autocomplete="current-password" required>
+      </div>
+      <div class="actions">
+        <button type="submit" class="btn btn-primary">Sign in</button>
+      </div>
+    </form>
+  </div>
+</main>
+
+</body>
+</html>

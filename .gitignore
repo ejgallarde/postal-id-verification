@@ -1,0 +1,36 @@
+# --- PII: never commit real enrollment packets or extracted blobs ---
+files/
+data/
+blobstore/
+*.wsq
+
+# --- Secrets / keystores ---
+*.p12
+*.jks
+*.pem
+*.key
+.env
+src/main/resources/keystore/
+
+# --- Build output ---
+target/
+!.mvn/wrapper/maven-wrapper.jar
+
+# --- H2 database files ---
+*.mv.db
+*.trace.db
+
+# --- IDE ---
+.idea/
+*.iml
+.vscode/
+.classpath
+.project
+.settings/
+
+# --- OS ---
+Thumbs.db
+.DS_Store
+
+# --- Dependency-check cache ---
+.dependency-check/
