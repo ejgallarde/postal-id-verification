@@ -60,7 +60,7 @@ class MatchRulesTest {
 
         @Test
         void exactMatch() {
-            assertThat(defaultRules().evaluate(query("MARIA", "REYES", "SANTOS", DOB), record())).isNull();
+            assertThat(defaultRules().evaluate(query("MARIA", "REYES", "SANTOS", DOB), record())).isEmpty();
         }
 
         @ParameterizedTest(name = "case and padding: \"{0}\" / \"{1}\" / \"{2}\"")
@@ -70,13 +70,13 @@ class MatchRulesTest {
                 "MARIA,   Reyes,   sanTOS"
         })
         void ignoresCaseAndPadding(String first, String middle, String last) {
-            assertThat(defaultRules().evaluate(query(first, middle, last, DOB), record())).isNull();
+            assertThat(defaultRules().evaluate(query(first, middle, last, DOB), record())).isEmpty();
         }
 
         @ParameterizedTest(name = "middle initial \"{0}\" is accepted")
         @CsvSource({"R", "r", "'R.'", "'  R  '"})
         void acceptsMiddleInitialByDefault(String middle) {
-            assertThat(defaultRules().evaluate(query("MARIA", middle, "SANTOS", DOB), record())).isNull();
+            assertThat(defaultRules().evaluate(query("MARIA", middle, "SANTOS", DOB), record())).isEmpty();
         }
 
         @Test
@@ -85,8 +85,8 @@ class MatchRulesTest {
             Cardholder noMiddle = record();
             noMiddle.setMiddleNameNorm(null);
 
-            assertThat(defaultRules().evaluate(query("MARIA", null, "SANTOS", DOB), noMiddle)).isNull();
-            assertThat(defaultRules().evaluate(query("MARIA", "  ", "SANTOS", DOB), noMiddle)).isNull();
+            assertThat(defaultRules().evaluate(query("MARIA", null, "SANTOS", DOB), noMiddle)).isEmpty();
+            assertThat(defaultRules().evaluate(query("MARIA", "  ", "SANTOS", DOB), noMiddle)).isEmpty();
         }
     }
 
@@ -96,34 +96,29 @@ class MatchRulesTest {
 
         @Test
         void wrongSurname() {
-            assertThat(defaultRules().evaluate(query("MARIA", "REYES", "SANTOZ", DOB), record()))
-                    .isEqualTo(FailureReason.SURNAME_MISMATCH);
+            assertThat(defaultRules().evaluate(query("MARIA", "REYES", "SANTOZ", DOB), record())).containsExactly(FailureReason.SURNAME_MISMATCH);
         }
 
         @Test
         void wrongFirstName() {
-            assertThat(defaultRules().evaluate(query("MARIE", "REYES", "SANTOS", DOB), record()))
-                    .isEqualTo(FailureReason.FIRST_NAME_MISMATCH);
+            assertThat(defaultRules().evaluate(query("MARIE", "REYES", "SANTOS", DOB), record())).containsExactly(FailureReason.FIRST_NAME_MISMATCH);
         }
 
         @Test
         void wrongMiddleName() {
-            assertThat(defaultRules().evaluate(query("MARIA", "CRUZ", "SANTOS", DOB), record()))
-                    .isEqualTo(FailureReason.MIDDLE_NAME_MISMATCH);
+            assertThat(defaultRules().evaluate(query("MARIA", "CRUZ", "SANTOS", DOB), record())).containsExactly(FailureReason.MIDDLE_NAME_MISMATCH);
         }
 
         @Test
         @DisplayName("a middle initial that is not the stored initial")
         void wrongMiddleInitial() {
-            assertThat(defaultRules().evaluate(query("MARIA", "C", "SANTOS", DOB), record()))
-                    .isEqualTo(FailureReason.MIDDLE_NAME_MISMATCH);
+            assertThat(defaultRules().evaluate(query("MARIA", "C", "SANTOS", DOB), record())).containsExactly(FailureReason.MIDDLE_NAME_MISMATCH);
         }
 
         @Test
         @DisplayName("omitting a middle name the record has is rejected by default")
         void omittedMiddleNameRejectedByDefault() {
-            assertThat(defaultRules().evaluate(query("MARIA", null, "SANTOS", DOB), record()))
-                    .isEqualTo(FailureReason.MIDDLE_NAME_MISMATCH);
+            assertThat(defaultRules().evaluate(query("MARIA", null, "SANTOS", DOB), record())).containsExactly(FailureReason.MIDDLE_NAME_MISMATCH);
         }
 
         @Test
@@ -132,14 +127,12 @@ class MatchRulesTest {
             Cardholder noMiddle = record();
             noMiddle.setMiddleNameNorm(null);
 
-            assertThat(defaultRules().evaluate(query("MARIA", "REYES", "SANTOS", DOB), noMiddle))
-                    .isEqualTo(FailureReason.MIDDLE_NAME_MISMATCH);
+            assertThat(defaultRules().evaluate(query("MARIA", "REYES", "SANTOS", DOB), noMiddle)).containsExactly(FailureReason.MIDDLE_NAME_MISMATCH);
         }
 
         @Test
         void wrongDateOfBirth() {
-            assertThat(defaultRules().evaluate(query("MARIA", "REYES", "SANTOS", LocalDate.of(1988, 3, 18)), record()))
-                    .isEqualTo(FailureReason.DATE_OF_BIRTH_MISMATCH);
+            assertThat(defaultRules().evaluate(query("MARIA", "REYES", "SANTOS", LocalDate.of(1988, 3, 18)), record())).containsExactly(FailureReason.DATE_OF_BIRTH_MISMATCH);
         }
 
         @Test
@@ -150,8 +143,37 @@ class MatchRulesTest {
 
             LocalDate mayThird = LocalDate.of(1988, 5, 3);
 
-            assertThat(defaultRules().evaluate(query("MARIA", "REYES", "SANTOS", mayThird), marchFifth))
-                    .isEqualTo(FailureReason.DATE_OF_BIRTH_MISMATCH);
+            assertThat(defaultRules().evaluate(query("MARIA", "REYES", "SANTOS", mayThird), marchFifth)).containsExactly(FailureReason.DATE_OF_BIRTH_MISMATCH);
+        }
+    }
+
+    @Nested
+    @DisplayName("multiple mismatches")
+    class MultipleMismatches {
+
+        @Test
+        @DisplayName("every failing field is reported, not just the first")
+        void reportsAllMismatches() {
+            assertThat(defaultRules().evaluate(
+                    query("WRONG", "REYES", "ALSOWRONG", LocalDate.of(1999, 1, 1)), record()))
+                    .containsExactly(
+                            FailureReason.SURNAME_MISMATCH,
+                            FailureReason.FIRST_NAME_MISMATCH,
+                            FailureReason.DATE_OF_BIRTH_MISMATCH);
+        }
+
+        @Test
+        @DisplayName("mismatch reasons map onto the caller's own request field names")
+        void reasonsCarryRequestFieldNames() {
+            assertThat(FailureReason.SURNAME_MISMATCH.requestField()).isEqualTo("lastName");
+            assertThat(FailureReason.FIRST_NAME_MISMATCH.requestField()).isEqualTo("firstName");
+            assertThat(FailureReason.MIDDLE_NAME_MISMATCH.requestField()).isEqualTo("middleName");
+            assertThat(FailureReason.DATE_OF_BIRTH_MISMATCH.requestField()).isEqualTo("dateOfBirth");
+
+            // Reasons about the record as a whole name no field.
+            assertThat(FailureReason.NO_SUCH_RECORD.isFieldMismatch()).isFalse();
+            assertThat(FailureReason.CARD_NOT_ISSUED.isFieldMismatch()).isFalse();
+            assertThat(FailureReason.CARD_EXPIRED.isFieldMismatch()).isFalse();
         }
     }
 
@@ -164,8 +186,7 @@ class MatchRulesTest {
             PostalIdProperties properties = new PostalIdProperties();
             properties.getVerify().setAllowMiddleInitial(false);
 
-            assertThat(rulesWith(properties).evaluate(query("MARIA", "R", "SANTOS", DOB), record()))
-                    .isEqualTo(FailureReason.MIDDLE_NAME_MISMATCH);
+            assertThat(rulesWith(properties).evaluate(query("MARIA", "R", "SANTOS", DOB), record())).containsExactly(FailureReason.MIDDLE_NAME_MISMATCH);
         }
 
         @Test
@@ -173,7 +194,7 @@ class MatchRulesTest {
             PostalIdProperties properties = new PostalIdProperties();
             properties.getVerify().setAllowMiddleNameOmission(true);
 
-            assertThat(rulesWith(properties).evaluate(query("MARIA", null, "SANTOS", DOB), record())).isNull();
+            assertThat(rulesWith(properties).evaluate(query("MARIA", null, "SANTOS", DOB), record())).isEmpty();
         }
     }
 

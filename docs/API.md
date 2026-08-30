@@ -34,18 +34,26 @@ You submit the details printed on a Postal ID card. The service answers **`VALID
 
 Anything else is `INVALID`.
 
+A `VALID` response returns the cardholder details printed on the card, the card validity window,
+and short-lived references to the photograph and signature.
+
 ### What `INVALID` will not tell you
 
 Every failing case returns a byte-identical body. The API will not reveal whether a reference
 number exists, whether a card was issued, or which field was wrong.
 
-This is deliberate and not negotiable through configuration. A verification endpoint that explains
-its refusals is a tool for reconstructing a stranger's identity: submit a real reference number
-with a guessed surname, and a helpful error confirms the guess. Distinguishing "no such card" from
-"wrong name" would also turn the endpoint into a directory of who holds a Postal ID.
+This is deliberate. A verification endpoint that explains its refusals is a tool for
+reconstructing a stranger's identity: submit a real reference number with a guessed surname, and
+a helpful error confirms the guess. Distinguishing "no such card" from "wrong name" would also
+turn the endpoint into a directory of who holds a Postal ID.
 
 The reason for each refusal *is* recorded, in the service's audit trail, where operators can
-investigate it. It is simply not returned to you.
+investigate it.
+
+**One exception, granted per client:** a token carrying the `postalid.diagnostics` scope receives
+a `reason` object naming every mismatched field. See
+[Diagnostics](#diagnostics-naming-the-mismatched-fields). If you have not been granted that
+scope, everything above applies to you unchanged.
 
 ### Matching rules
 
@@ -82,6 +90,7 @@ exchange them for a short-lived access token and send that token as a bearer cre
 |---|---|
 | `postalid.verify` | Submitting verification requests |
 | `postalid.images` | Fetching a verified cardholder's photo and signature |
+| `postalid.diagnostics` | Receiving the reason and mismatched fields on an INVALID result |
 
 Scopes are independent. A client granted only `postalid.verify` receives image references in a
 `VALID` response but gets `403` when it tries to fetch them — request only what you need.
@@ -157,15 +166,71 @@ lookup.
 ```json
 {
   "result": "VALID",
-  "verifiedAt": "2026-08-18T08:19:43.687582Z",
-  "requestId": "a87ab082-4cc8-4f79-9d54-5ce2b65ffe63",
+  "verifiedAt": "2026-08-30T08:35:04.526Z",
+  "requestId": "7038dc89-3bf6-4b9e-b423-309586eef8d1",
+  "cardholder": {
+    "postalRefNo": "A11230000001",
+    "firstName":   "JUAN",
+    "middleName":  "SANTOS",
+    "lastName":    "DELA CRUZ",
+    "suffix":      null,
+    "dateOfBirth": "1990-01-31",
+    "gender":      "F",
+    "nationality": "Filipino",
+    "address": {
+      "houseBldgLot": "BLK 7 LOT 2",
+      "subdivision":  "GREENVIEW SUBDIVISION",
+      "barangay":     "BARANGAY SAN ROQUE",
+      "city":         "City of Calamba",
+      "province":     "BTG",
+      "postalCode":   "4027",
+      "country":      "PHL"
+    },
+    "issuingPostOffice": null,
+    "enrolledOn":        "2024-02-01"
+  },
+  "validity": {
+    "issuedOn":        "2024-02-14",
+    "expiresOn":       "2027-02-14",
+    "status":          "ACTIVE",
+    "daysUntilExpiry": 1069,
+    "derived":         true
+  },
   "images": {
-    "photo": "/api/v1/images/vi1_dsUuf6LqRVgoSbSLBW_nsUcF4Zr8OFYnzWeoe-4",
-    "signature": "/api/v1/images/fLZhIw8UGo1n7JSq2NQ8cQHD6o6UiHgbJlopISxeXwE"
+    "photo": "/api/v1/images/Op4OPoAUFkBZjIVlmfXEHtRPpun-I3_5WoOdpU20_Z8",
+    "signature": "/api/v1/images/0ca-q-A1xDzxkTWwoakbT8bwGQba4ZeXWlRnhkUhNQc"
   },
   "imagesExpireIn": 300
 }
 ```
+
+#### What the cardholder block contains, and what it never will
+
+The rule is **only what is printed on the card**. You are holding that card, so echoing its
+contents lets you spot a tampered one while disclosing nothing you could not already read.
+
+Present on the enrollment record and deliberately **never returned**: parents' names, mobile
+number, contact number, email, TIN, CRN, GSIS, PhilHealth, HDMF, employer, occupation, work
+address, place of birth, physical description, payment records, and every internal processing
+field. Place of birth and the government identifiers are the sharpest omissions — both are widely
+used as knowledge-based authentication secrets, so handing them to a verifying party would
+actively enable impersonation.
+
+#### Card validity is derived
+
+**The source data has no expiry column.** `expiresOn` is computed as the card production date
+plus a configured validity period (three years by default), which is why every response carries
+`derived: true`. Treat it as indicative, not as an issued fact.
+
+| `validity.status` | Meaning |
+|---|---|
+| `ACTIVE` | Within the derived validity window |
+| `EXPIRED` | Past the derived expiry date |
+| `UNKNOWN` | No production or enrolment date on record, so nothing can be said |
+
+An expired card still returns **`VALID`**. The identity checked out, which is a different fact
+from the card being current — and collapsing the two would stop you telling a lapsed card from a
+forged one. **Read `validity.status` and apply your own policy.**
 
 ### Response — INVALID
 
@@ -179,8 +244,40 @@ lookup.
 }
 ```
 
-The `images` and `imagesExpireIn` keys are **absent**, not null. Their presence is the only
-structural difference between the two bodies.
+The `cardholder`, `validity`, `images` and `imagesExpireIn` keys are **absent**, not null.
+
+#### Diagnostics: naming the mismatched fields
+
+Clients granted `postalid.diagnostics` receive a `reason` object on every INVALID:
+
+```json
+{
+  "result": "INVALID",
+  "verifiedAt": "2026-08-30T08:36:34.479Z",
+  "requestId": "b6b8b4de-1362-4881-936d-70b21e0bc769",
+  "reason": {
+    "code": "FIELD_MISMATCH",
+    "mismatchedFields": ["lastName", "firstName", "dateOfBirth"],
+    "message": "3 field(s) did not match the stored record"
+  }
+}
+```
+
+`mismatchedFields` lists **every** field that failed, not just the first, so a caller correcting
+one typo is not sent round the loop for a second they were never told about.
+
+| `reason.code` | Meaning |
+|---|---|
+| `FIELD_MISMATCH` | One or more submitted fields did not match; see `mismatchedFields` |
+| `NO_SUCH_RECORD` | No record carries that reference number |
+| `CARD_NOT_ISSUED` | The record exists but no card was ever produced |
+| `RECORD_DELETED` | The record exists but has been deleted |
+| `CARD_EXPIRED` | Past expiry, where the deployment treats that as invalid |
+
+Without the scope, the `reason` key is absent entirely and all failures remain identical. The
+scope is granted per client because field-level detail is exactly what makes the endpoint usable
+for confirming guesses about a stranger — request it only if you genuinely need it, and expect to
+justify it.
 
 ### Fields
 
@@ -293,9 +390,9 @@ Two budgets apply to verification, and both must pass:
 
 | Budget | Default |
 |---|---|
-| Verifications per client per minute | 60 |
-| Verifications per source address per minute | 20 |
-| Image fetches per client per minute | 120 |
+| Verifications per client per minute | 300 |
+| Verifications per source address per minute | 100 |
+| Image fetches per client per minute | 600 |
 
 Tokens refill continuously rather than resetting on the minute, so a client that paces itself is
 never blocked by a boundary.
@@ -371,6 +468,12 @@ as a stable URL for a cardholder.
 them, treat them with the same care as the card itself.
 
 **Trust `Content-Type`.** Photo and signature come back in different formats.
+
+**Check `validity.status` on every VALID.** A `VALID` result means the identity matched, not that
+the card is current. An expired card returns `VALID` with `status: EXPIRED`.
+
+**Treat `expiresOn` as indicative.** It is derived from the production date, not supplied by the
+source system, and is flagged `derived: true` for that reason.
 
 **Send only what you have.** Omit `middleName` when the card shows none, rather than sending an
 empty string — though both are handled identically.

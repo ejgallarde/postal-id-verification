@@ -210,3 +210,49 @@ figcaption { font-size: 13px; color: var(--ink-soft); margin-top: 7px; }
     .field-row { flex-direction: column; gap: 0; }
     .images figure.signature img { width: 100%; }
 }
+
+/* --- Record details panel --- */
+
+.details { margin: 0; display: grid; gap: 0; border-top: 1px solid var(--line); }
+
+.details > div {
+    display: grid;
+    grid-template-columns: 170px minmax(0, 1fr);
+    gap: 16px;
+    padding: 9px 0;
+    border-bottom: 1px solid var(--line);
+}
+
+.details dt { font-size: 13px; font-weight: 600; color: var(--ink-soft); margin: 0; }
+.details dd { margin: 0; font-size: 15px; }
+.details dd.mono { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; letter-spacing: .03em; }
+
+/* --- Validity --- */
+
+.validity {
+    margin-top: 18px;
+    padding: 13px 16px;
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--valid);
+    border-radius: 0 7px 7px 0;
+    background: var(--valid-bg);
+}
+
+.validity-expired { border-left-color: var(--invalid); background: var(--invalid-bg); }
+
+.validity-line { margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; }
+
+.validity-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+}
+
+.validity strong { font-size: 15px; color: var(--valid); }
+.validity-expired strong { color: var(--invalid); }
+
+@media (max-width: 560px) {
+    .details > div { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+}

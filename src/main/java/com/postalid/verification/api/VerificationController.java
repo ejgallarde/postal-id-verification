@@ -19,6 +19,8 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -41,15 +43,21 @@ import java.util.UUID;
 @Tag(name = "Verification", description = "Validate a Postal ID against the enrollment database")
 public class VerificationController {
 
+    /** Grants a client the field-level failure detail on an INVALID result. */
+    private static final String DIAGNOSTICS_AUTHORITY = "SCOPE_postalid.diagnostics";
+
     private final VerificationFacade verificationFacade;
     private final RateLimiter rateLimiter;
+    private final CardResponseMapper mapper;
     private final PostalIdProperties properties;
 
     public VerificationController(VerificationFacade verificationFacade,
                                   RateLimiter rateLimiter,
+                                  CardResponseMapper mapper,
                                   PostalIdProperties properties) {
         this.verificationFacade = verificationFacade;
         this.rateLimiter = rateLimiter;
+        this.mapper = mapper;
         this.properties = properties;
     }
 
@@ -63,17 +71,26 @@ public class VerificationController {
                     deleted, it has reached an issued status, and the surname, first name, middle
                     name and date of birth all match.
 
+                    A VALID response carries the cardholder details as printed on the card, the
+                    card's validity window, and short-lived relative URLs for the photograph and
+                    signature. Fetching the images needs the postalid.images scope.
+
+                    Expiry is derived, not supplied by the source data: it is the card's production
+                    date plus a configured validity period, and is flagged as derived. An expired
+                    card still returns VALID with validity.status = EXPIRED, because the identity
+                    did check out - read validity.status and apply your own policy.
+
                     Every unsuccessful case produces the same INVALID body. The endpoint will not
                     reveal whether the reference number exists or which field failed, because that
-                    would make it usable for harvesting other people's details.
-
-                    On VALID the response carries short-lived relative URLs for the cardholder's
-                    photograph and signature. Fetching them needs the postalid.images scope.
+                    would make it usable for harvesting other people's details. Clients granted the
+                    postalid.diagnostics scope additionally receive a reason object naming every
+                    mismatched field.
                     """,
             security = @SecurityRequirement(name = "oauth2-client-credentials", scopes = "postalid.verify"))
     @ApiResponses({
             @ApiResponse(responseCode = "200",
-                    description = "Verification completed. Inspect `result` for the answer."),
+                    description = "Verification completed. Inspect `result` for the answer, and on "
+                            + "VALID also `validity.status` before treating the card as current."),
             @ApiResponse(responseCode = "400",
                     description = "The request body failed validation.", content = @io.swagger.v3.oas.annotations.media.Content()),
             @ApiResponse(responseCode = "401",
@@ -116,9 +133,8 @@ public class VerificationController {
         VerificationFacade.Result result = verificationFacade.verify(query, context);
 
         VerifyResponse body = result.valid()
-                ? VerifyResponse.valid(requestId, toImageUrls(result.imageReferences()),
-                        properties.getMedia().getTokenTtl().toSeconds())
-                : VerifyResponse.invalid(requestId);
+                ? buildValidResponse(requestId, result)
+                : buildInvalidResponse(requestId, result);
 
         return ResponseEntity.ok()
                 // A verification answer is about a specific person and must not be cached or
@@ -127,6 +143,33 @@ public class VerificationController {
                 .header(HttpHeaders.PRAGMA, "no-cache")
                 .header("X-Request-Id", requestId)
                 .body(body);
+    }
+
+    private VerifyResponse buildValidResponse(String requestId, VerificationFacade.Result result) {
+        return VerifyResponse.valid(
+                requestId,
+                result.outcome().matchedCardholder().map(mapper::toDetails).orElse(null),
+                mapper.toValidity(result.outcome().validity()),
+                toImageUrls(result.imageReferences()),
+                properties.getMedia().getTokenTtl().toSeconds());
+    }
+
+    /**
+     * An INVALID response says nothing about why, unless the caller was specifically trusted with
+     * that. Field-level detail is what turns this endpoint into a tool for confirming guesses about
+     * strangers, so it is granted per client rather than published by default.
+     */
+    private VerifyResponse buildInvalidResponse(String requestId, VerificationFacade.Result result) {
+        if (!hasDiagnosticsScope()) {
+            return VerifyResponse.invalid(requestId);
+        }
+        return VerifyResponse.invalid(requestId, mapper.toFailure(result.outcome().failureReasons()));
+    }
+
+    private boolean hasDiagnosticsScope() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        return authentication != null && authentication.getAuthorities().stream()
+                .anyMatch(granted -> DIAGNOSTICS_AUTHORITY.equals(granted.getAuthority()));
     }
 
     /** Maps document codes to the friendlier keys the API contract exposes. */

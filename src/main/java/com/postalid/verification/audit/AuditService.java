@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.stream.Collectors;
 
 /**
  * Writes the verification audit trail.
@@ -39,8 +40,16 @@ public class AuditService {
         audit.setChannel(context.channel().name());
         audit.setResult(outcome.valid() ? "VALID" : "INVALID");
 
-        FailureReason reason = outcome.failureReason();
-        audit.setFailureReasonCode(reason == null ? null : reason.name());
+        FailureReason primary = outcome.primaryFailureReason();
+        audit.setFailureReasonCode(primary == null ? null : primary.name());
+
+        // The complete list, so an operator investigating a run of refusals sees every field that
+        // failed rather than just the first one the rules happened to check.
+        String mismatched = outcome.failureReasons().stream()
+                .filter(FailureReason::isFieldMismatch)
+                .map(FailureReason::requestField)
+                .collect(Collectors.joining(","));
+        audit.setMismatchedFields(mismatched.isEmpty() ? null : mismatched);
 
         audit.setPrnHash(prnHasher.hash(normalizedPrn));
         audit.setMatchedRecordId(outcome.matchedCardholder().map(Cardholder::getRecordId).orElse(null));

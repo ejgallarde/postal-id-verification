@@ -43,7 +43,10 @@ public class OpenApiConfig {
                         .scopes(new Scopes()
                                 .addString("postalid.verify", "Submit Postal ID verification requests")
                                 .addString("postalid.images",
-                                        "Retrieve the photo and signature of a verified cardholder"))));
+                                        "Retrieve the photo and signature of a verified cardholder")
+                                .addString("postalid.diagnostics",
+                                        "Receive the reason and mismatched fields on an INVALID result. "
+                                        + "Granted per client; without it every INVALID is identical."))));
 
         return new OpenAPI()
                 .info(new Info()
@@ -58,11 +61,25 @@ public class OpenApiConfig {
                                 status, and the name and date of birth agree. Otherwise it answers
                                 `INVALID`.
 
+                                ## What a VALID response carries
+                                The cardholder details printed on the card, the card validity window,
+                                and short-lived references to the photograph and signature.
+
+                                Expiry is **derived**, not supplied by the source data: it is the card
+                                production date plus a configured validity period, and is flagged
+                                `derived: true`. An expired card still returns `VALID` with
+                                `validity.status = EXPIRED`, because the identity did check out.
+                                Read `validity.status` and apply your own policy.
+
                                 ## What INVALID does not tell you
                                 Every failing case returns the same body. The API will not say whether
                                 a reference number exists or which field was wrong. This is deliberate:
                                 a more helpful answer would let the endpoint be used to harvest
                                 personal data belonging to other people.
+
+                                Clients granted the `postalid.diagnostics` scope additionally receive
+                                a `reason` object naming every mismatched field. That scope is granted
+                                per client, not by default.
 
                                 ## Images
                                 A `VALID` response includes short-lived references to the cardholder's

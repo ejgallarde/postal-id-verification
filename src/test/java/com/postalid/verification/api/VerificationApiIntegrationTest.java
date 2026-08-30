@@ -215,7 +215,9 @@ class VerificationApiIntegrationTest {
             assertThat(json.fieldNames()).toIterable()
                     .containsExactlyInAnyOrder("result", "verifiedAt", "requestId");
             assertThat(json.has("images")).isFalse();
-            assertThat(json.has("failureReason")).isFalse();
+            assertThat(json.has("reason")).isFalse();
+            assertThat(json.has("cardholder")).isFalse();
+            assertThat(json.has("validity")).isFalse();
         }
     }
 

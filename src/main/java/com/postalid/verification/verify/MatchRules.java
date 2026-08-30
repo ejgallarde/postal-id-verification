@@ -4,6 +4,8 @@ import com.postalid.verification.config.PostalIdProperties;
 import com.postalid.verification.domain.Cardholder;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -12,10 +14,12 @@ import java.util.Objects;
  * <p>Surname, first name and date of birth must match exactly on the normalized form. The middle
  * name is treated more loosely because cards and data-capture practice disagree about it: some
  * cards print only an initial, and some holders never supply one. What is tolerated is
- * configurable, so the strictness can be tightened without touching this class.
+ * configurable, so strictness can be tightened without touching this class.
  *
- * <p>Every field is evaluated even once something has already failed. Short-circuiting would let
- * a caller time the response to learn which field they got wrong.
+ * <p>Every field is evaluated even once something has already failed, for two reasons.
+ * Short-circuiting would let a caller time the response to learn which field they got wrong; and
+ * diagnostics are expected to report <em>every</em> mismatch, so a caller correcting a typo is not
+ * sent round the loop again for a second one they were never told about.
  */
 @Component
 public class MatchRules {
@@ -29,28 +33,28 @@ public class MatchRules {
     }
 
     /**
-     * @return the reason the submitted details do not match, or {@code null} when they do.
+     * @return every field that failed to match, in a stable order; empty when the details match.
      */
-    public FailureReason evaluate(VerificationQuery query, Cardholder record) {
+    public List<FailureReason> evaluate(VerificationQuery query, Cardholder record) {
         boolean surnameOk = normalizer.matches(query.lastName(), record.getLastNameNorm());
         boolean firstNameOk = normalizer.matches(query.firstName(), record.getFirstNameNorm());
         boolean middleNameOk = middleNameMatches(query.middleName(), record.getMiddleNameNorm());
         boolean dobOk = Objects.equals(query.dateOfBirth(), record.getDateOfBirth());
 
-        // Fixed reporting order; all four were computed regardless.
+        List<FailureReason> mismatches = new ArrayList<>(4);
         if (!surnameOk) {
-            return FailureReason.SURNAME_MISMATCH;
+            mismatches.add(FailureReason.SURNAME_MISMATCH);
         }
         if (!firstNameOk) {
-            return FailureReason.FIRST_NAME_MISMATCH;
+            mismatches.add(FailureReason.FIRST_NAME_MISMATCH);
         }
         if (!middleNameOk) {
-            return FailureReason.MIDDLE_NAME_MISMATCH;
+            mismatches.add(FailureReason.MIDDLE_NAME_MISMATCH);
         }
         if (!dobOk) {
-            return FailureReason.DATE_OF_BIRTH_MISMATCH;
+            mismatches.add(FailureReason.DATE_OF_BIRTH_MISMATCH);
         }
-        return null;
+        return mismatches;
     }
 
     /**

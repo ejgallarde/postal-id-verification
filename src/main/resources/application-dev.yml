@@ -42,6 +42,7 @@ postalid:
         scopes:
           - postalid.verify
           - postalid.images
+          - postalid.diagnostics
 
   web:
     # Convenient locally: Swagger UI opens without signing in first.

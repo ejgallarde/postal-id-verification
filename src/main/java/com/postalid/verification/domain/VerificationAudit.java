@@ -44,6 +44,13 @@ public class VerificationAudit {
     @Column(name = "failure_reason_code", length = 32)
     private String failureReasonCode;
 
+    /**
+     * Every field that failed, comma-separated, using the caller's own field names.
+     * Null unless the failure was a field mismatch.
+     */
+    @Column(name = "mismatched_fields", length = 255)
+    private String mismatchedFields;
+
     @Column(name = "prn_hash", nullable = false, length = 64)
     private String prnHash;
 
@@ -78,6 +85,9 @@ public class VerificationAudit {
 
     public String getFailureReasonCode() { return failureReasonCode; }
     public void setFailureReasonCode(String failureReasonCode) { this.failureReasonCode = failureReasonCode; }
+
+    public String getMismatchedFields() { return mismatchedFields; }
+    public void setMismatchedFields(String mismatchedFields) { this.mismatchedFields = mismatchedFields; }
 
     public String getPrnHash() { return prnHash; }
     public void setPrnHash(String prnHash) { this.prnHash = prnHash; }

@@ -78,16 +78,42 @@ ingester writes the same normalized form into the `*_norm` columns, so stored an
 can never be normalized differently. A middle **initial** is accepted where the record holds a
 full middle name, because many cards print only the initial.
 
+### What a VALID response carries
+
+The cardholder details **as printed on the card** — name, date of birth, gender, nationality,
+home address, issuing post office — plus the card validity window and short-lived references to
+the photograph and signature.
+
+The selection follows one rule: return only what the card itself shows. The verifier is holding
+that card, so echoing its contents lets them spot a tampered one while disclosing nothing they
+could not already read. Parents' names, mobile number, email, TIN, GSIS, PhilHealth, HDMF,
+employer, work address and place of birth are all on the record and none are returned — place of
+birth and the government identifiers especially, since both are used as knowledge-based
+authentication secrets elsewhere.
+
+### Card validity is derived, and says so
+
+The enrollment export has **no expiry column**. Validity is computed as the card production date
+— the issued entry in the status trail, falling back to enrolment date — plus
+`postalid.verify.validity-period`, default three years. Every response flags it `derived: true`.
+
+An expired card still returns `VALID` with `validity.status = EXPIRED`: the identity checked out,
+which is a different fact from the card being current. Collapsing the two would stop a caller
+telling a lapsed card from a forged one. Set `postalid.verify.treat-expired-as-invalid` for the
+stricter reading.
+
 ### Every refusal looks identical
 
 Unknown reference number, un-issued card, misspelt surname: all return the same bare `INVALID`,
 with no indication of which. The reason goes to the audit trail instead.
 
-This costs the caller some diagnostic convenience and buys something worth more. An endpoint that
-explains its refusals lets anyone with a client credential confirm guesses one field at a time,
-and turns the service into a directory of who holds a Postal ID. For the same reason the
-not-found path still runs a comparison against a decoy record, so it cannot be identified by
-being measurably faster.
+Clients granted the `postalid.diagnostics` scope additionally receive a `reason` object naming
+**every** mismatched field, not just the first. That scope is granted per client precisely because
+field-level detail is what would otherwise let any credential holder confirm guesses about a
+stranger one field at a time. Without that scope the endpoint reveals nothing — not even whether
+a reference number exists, which would otherwise make it a directory of who holds a Postal ID.
+For the same reason the not-found path still runs a comparison against a decoy record, so it
+cannot be identified by being measurably faster.
 
 ---
 
@@ -179,9 +205,9 @@ layout of one subfolder per enrollee works, with or without a batch level above 
 ```
 /secure/packets/
   2026-Q1/
-    0120260801F44M220001/
-      0120260801F44M220001_demographics.csv
-      0120260801F44M220001_Photo.jpg
+    0119990101ZZZTEST0001/
+      0119990101ZZZTEST0001_demographics.csv
+      0119990101ZZZTEST0001_Photo.jpg
       …
 ```
 
@@ -228,6 +254,8 @@ All settings live under `postalid.*`. The ones that matter most:
 | `postalid.verify.issued-statuses` | `CDE` | Statuses that count as an issued card |
 | `postalid.verify.allow-middle-initial` | `true` | Accept a middle initial for a full middle name |
 | `postalid.verify.allow-middle-name-omission` | `false` | Accept an omitted middle name |
+| `postalid.verify.validity-period` | `P3Y` | Derived card validity, counted from the production date |
+| `postalid.verify.treat-expired-as-invalid` | `false` | Report an expired card as INVALID rather than VALID + EXPIRED |
 | `postalid.media.token-ttl` | `5m` | Image reference lifetime |
 | `postalid.media.token-max-uses` | `5` | Fetches allowed per reference |
 | `postalid.storage.root` | `./data/blobstore` | Where servable image bytes live |
@@ -239,7 +267,7 @@ All settings live under `postalid.*`. The ones that matter most:
 | `postalid.oauth.jwk.keystore-location` | *(none)* | RSA signing key; ephemeral if unset |
 | `postalid.web.public-api-docs` | `false` | Whether Swagger UI is readable without signing in |
 
-Rate limits default to 60 verifications per client per minute, 20 per source address, and 120
+Rate limits default to 300 verifications per client per minute, 100 per source address, and 600
 image fetches per client. They are held in-process: behind more than one instance the effective
 limit multiplies by the instance count, so divide the configured numbers accordingly until a
 shared backend is introduced.

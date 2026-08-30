@@ -3,6 +3,7 @@ package com.postalid.verification.config;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 import java.time.Duration;
+import java.time.Period;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -41,6 +42,18 @@ public class PostalIdProperties {
         /** Accept an omitted middle name where the stored record holds a full middle name. */
         private boolean allowMiddleNameOmission = false;
 
+        /**
+         * How long a card stays valid, counted from the date it was produced.
+         *
+         * <p>The enrollment export carries no expiry column, so validity is <em>derived</em>:
+         * issue date plus this period. Responses flag it as derived for exactly that reason.
+         * Confirm the real rule with the data owner before consumers depend on it.
+         */
+        private Period validityPeriod = Period.ofYears(3);
+
+        /** Report an expired card as INVALID rather than VALID with an EXPIRED validity block. */
+        private boolean treatExpiredAsInvalid = false;
+
         public Set<String> getIssuedStatuses() { return issuedStatuses; }
         public void setIssuedStatuses(Set<String> issuedStatuses) { this.issuedStatuses = issuedStatuses; }
 
@@ -49,6 +62,12 @@ public class PostalIdProperties {
 
         public boolean isAllowMiddleNameOmission() { return allowMiddleNameOmission; }
         public void setAllowMiddleNameOmission(boolean v) { this.allowMiddleNameOmission = v; }
+
+        public Period getValidityPeriod() { return validityPeriod; }
+        public void setValidityPeriod(Period v) { this.validityPeriod = v; }
+
+        public boolean isTreatExpiredAsInvalid() { return treatExpiredAsInvalid; }
+        public void setTreatExpiredAsInvalid(boolean v) { this.treatExpiredAsInvalid = v; }
     }
 
     public static class Media {
@@ -110,13 +129,13 @@ public class PostalIdProperties {
         private boolean enabled = true;
 
         /** Verification attempts per client per minute. */
-        private int verifyPerClientPerMinute = 60;
+        private int verifyPerClientPerMinute = 300;
 
         /** Verification attempts per source IP per minute. */
-        private int verifyPerIpPerMinute = 20;
+        private int verifyPerIpPerMinute = 100;
 
         /** Image fetches per client per minute. */
-        private int imagePerClientPerMinute = 120;
+        private int imagePerClientPerMinute = 600;
 
         /**
          * Consecutive INVALID results from one client within the lookback window before the

@@ -16,7 +16,7 @@ class FieldNormalizerTest {
     @ParameterizedTest(name = "\"{0}\" normalizes to \"{1}\"")
     @CsvSource({
             // The source CSV pads every field to a fixed width.
-            "'GUIRIBA                    ', GUIRIBA",
+            "'DELA CRUZ                    ', DELA CRUZ",
             "'  Dela Cruz  ',               DELA CRUZ",
             "'de la Cruz',                  DE LA CRUZ",
 
@@ -57,7 +57,7 @@ class FieldNormalizerTest {
 
     @Test
     void matchesRejectsDifferentValues() {
-        assertThat(normalizer.matches("GUIRIBA", "GUIRIBO")).isFalse();
+        assertThat(normalizer.matches("DELA CRUZ", "DELA CRUS")).isFalse();
         assertThat(normalizer.matches("SANTOS", "")).isFalse();
         assertThat(normalizer.matches(null, "SANTOS")).isFalse();
     }

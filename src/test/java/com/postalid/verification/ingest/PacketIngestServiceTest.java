@@ -1,5 +1,6 @@
 package com.postalid.verification.ingest;
 
+import com.postalid.verification.domain.CardStatusHistory;
 import com.postalid.verification.domain.CardStatusHistoryRepository;
 import com.postalid.verification.domain.Cardholder;
 import com.postalid.verification.domain.CardholderDocument;
@@ -23,6 +24,7 @@ import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Stream;
@@ -139,6 +141,25 @@ class PacketIngestServiceTest {
         assertThat(cardholder.getFirstNameNorm()).isEqualTo("MARIA");
         assertThat(cardholder.getMiddleNameNorm()).isEqualTo("REYES");
         assertThat(cardholder.getLastNameNorm()).isEqualTo("SANTOS");
+    }
+
+    @Test
+    @DisplayName("status timestamps round-trip verbatim, unshifted by the server's timezone")
+    void statusTimestampsAreNotShifted() throws IOException {
+        ingestService.ingestDirectory(packetDir);
+
+        Cardholder cardholder = cardholderRepository.findByRecordId(SyntheticPacket.RECORD_ID).orElseThrow();
+        List<CardStatusHistory> trail =
+                statusRepository.findByCardholderIdOrderByStatusTimestampAsc(cardholder.getId());
+
+        // The fixture writes 09:00:00, 09:05:00 and 10:00:00 as bare wall-clock times. They carry
+        // no zone, so they must come back exactly as written whatever the server's offset is.
+        // A UTC conversion applied to them would move every one by that offset.
+        assertThat(trail).extracting(CardStatusHistory::getStatusTimestamp)
+                .containsExactly(
+                        LocalDateTime.of(2026, 1, 1, 9, 0, 0, 1000),
+                        LocalDateTime.of(2026, 1, 1, 9, 5, 0, 2000),
+                        LocalDateTime.of(2026, 1, 1, 10, 0, 0, 3000));
     }
 
     @Test

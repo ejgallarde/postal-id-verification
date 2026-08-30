@@ -18,10 +18,12 @@ spring:
       # Flyway owns the schema. Hibernate only validates that the mapping agrees with it, so a
       # drifted entity fails at startup instead of silently reading the wrong column.
       ddl-auto: validate
-    properties:
-      hibernate:
-        jdbc:
-          time_zone: UTC
+    # Deliberately no hibernate.jdbc.time_zone here. That setting rewrites temporal values on the
+    # way to the driver, which is right for an Instant but wrong for the capture-station wall
+    # clocks in card_status_history: those are LocalDateTime precisely because they carry no zone,
+    # and converting them shifted every one by the server's UTC offset. Instants round-trip
+    # symmetrically through the JVM zone instead, so run the JVM in UTC (-Duser.timezone=UTC) to
+    # keep stored instants unambiguous.
 
   flyway:
     enabled: true
@@ -90,6 +92,13 @@ postalid:
       - CDE
     allow-middle-initial: true
     allow-middle-name-omission: false
+    # No expiry column exists in the enrollment export, so validity is derived: the card
+    # production date plus this period. Responses flag it derived:true for that reason.
+    # Confirm the real rule with the data owner before consumers depend on it.
+    validity-period: P3Y
+    # An expired card still verifies by default, reported as validity.status = EXPIRED.
+    # The identity checked out; that is a different fact from the card being current.
+    treat-expired-as-invalid: false
 
   media:
     token-ttl: 5m
@@ -106,9 +115,9 @@ postalid:
 
   rate-limit:
     enabled: true
-    verify-per-client-per-minute: 60
-    verify-per-ip-per-minute: 20
-    image-per-client-per-minute: 120
+    verify-per-client-per-minute: 300
+    verify-per-ip-per-minute: 100
+    image-per-client-per-minute: 600
     invalid-burst-threshold: 20
     invalid-lookback: 10m
     invalid-penalty: 5m

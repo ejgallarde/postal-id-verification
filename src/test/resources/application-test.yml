@@ -56,6 +56,7 @@ postalid:
         scopes:
           - postalid.verify
           - postalid.images
+          - postalid.diagnostics
       verify-only-client:
         name: Verify-only test client
         secret: verify-only-secret

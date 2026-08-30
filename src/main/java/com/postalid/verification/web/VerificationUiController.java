@@ -1,5 +1,6 @@
 package com.postalid.verification.web;
 
+import com.postalid.verification.api.CardResponseMapper;
 import com.postalid.verification.api.dto.VerifyRequest;
 import com.postalid.verification.audit.VerificationContext;
 import com.postalid.verification.config.PostalIdProperties;
@@ -32,9 +33,9 @@ import static org.springframework.http.HttpStatus.NOT_FOUND;
  * The operator console.
  *
  * <p>Server-rendered on purpose. Verification details go straight from the form to the service
- * without a browser-held API token, and the result page never receives anything beyond the
- * verdict and two opaque image references — so a screenshot, a browser cache or a shoulder-surfer
- * picks up nothing the operator was not already looking at.
+ * without a browser-held API token, and the result page shows only what the card itself prints
+ * plus two opaque image references — so a screenshot or a shoulder-surfer picks up nothing the
+ * operator was not already holding in their hand.
  *
  * <p>Images are served here rather than through {@code /api/v1/images} because that route
  * requires a bearer token a session-authenticated browser does not have. Both routes redeem the
@@ -45,13 +46,16 @@ public class VerificationUiController {
 
     private final VerificationFacade verificationFacade;
     private final ImageDeliveryService imageDeliveryService;
+    private final CardResponseMapper mapper;
     private final PostalIdProperties properties;
 
     public VerificationUiController(VerificationFacade verificationFacade,
                                     ImageDeliveryService imageDeliveryService,
+                                    CardResponseMapper mapper,
                                     PostalIdProperties properties) {
         this.verificationFacade = verificationFacade;
         this.imageDeliveryService = imageDeliveryService;
+        this.mapper = mapper;
         this.properties = properties;
     }
 
@@ -100,6 +104,14 @@ public class VerificationUiController {
         model.addAttribute("photoRef", references.get(DocumentType.PHOTO));
         model.addAttribute("signatureRef", references.get(DocumentType.SIGNATURE));
         model.addAttribute("expiresInSeconds", properties.getMedia().getTokenTtl().toSeconds());
+
+        // The operator is holding the card, so showing what the record says lets them compare it
+        // line by line. Same field selection as the API: only what the card itself prints.
+        if (result.valid()) {
+            model.addAttribute("cardholder",
+                    result.outcome().matchedCardholder().map(mapper::toDetails).orElse(null));
+            model.addAttribute("validity", mapper.toValidity(result.outcome().validity()));
+        }
 
         return "result";
     }

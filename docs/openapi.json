@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Postal ID Verification API",
-    "description": "Validates Postal Identification cards against the enrollment database.\n\n## How a verification works\nSubmit the details printed on a card. The service answers `VALID` when\na matching record exists, has not been deleted, has reached an issued\nstatus, and the name and date of birth agree. Otherwise it answers\n`INVALID`.\n\n## What INVALID does not tell you\nEvery failing case returns the same body. The API will not say whether\na reference number exists or which field was wrong. This is deliberate:\na more helpful answer would let the endpoint be used to harvest\npersonal data belonging to other people.\n\n## Images\nA `VALID` response includes short-lived references to the cardholder's\nphotograph and signature. They expire within minutes and permit only a\nfew fetches. Fingerprints and supporting document scans are held in the\ndatabase but are not retrievable through this API under any scope.\n\n## Rate limits\nRequests are budgeted per client and per source address. Exceeding a\nbudget returns `429` with a `Retry-After` header.\n",
+    "description": "Validates Postal Identification cards against the enrollment database.\n\n## How a verification works\nSubmit the details printed on a card. The service answers `VALID` when\na matching record exists, has not been deleted, has reached an issued\nstatus, and the name and date of birth agree. Otherwise it answers\n`INVALID`.\n\n## What a VALID response carries\nThe cardholder details printed on the card, the card validity window,\nand short-lived references to the photograph and signature.\n\nExpiry is **derived**, not supplied by the source data: it is the card\nproduction date plus a configured validity period, and is flagged\n`derived: true`. An expired card still returns `VALID` with\n`validity.status = EXPIRED`, because the identity did check out.\nRead `validity.status` and apply your own policy.\n\n## What INVALID does not tell you\nEvery failing case returns the same body. The API will not say whether\na reference number exists or which field was wrong. This is deliberate:\na more helpful answer would let the endpoint be used to harvest\npersonal data belonging to other people.\n\nClients granted the `postalid.diagnostics` scope additionally receive\na `reason` object naming every mismatched field. That scope is granted\nper client, not by default.\n\n## Images\nA `VALID` response includes short-lived references to the cardholder's\nphotograph and signature. They expire within minutes and permit only a\nfew fetches. Fingerprints and supporting document scans are held in the\ndatabase but are not retrievable through this API under any scope.\n\n## Rate limits\nRequests are budgeted per client and per source address. Exceeding a\nbudget returns `429` with a `Retry-After` header.\n",
     "contact": {
       "name": "Postal ID Verification Service"
     },
@@ -39,7 +39,7 @@
           "Verification"
         ],
         "summary": "Verify a Postal ID",
-        "description": "Checks the submitted details against the enrollment record identified by the\npostal reference number, and answers VALID or INVALID.\n\nVALID requires all of: a record with that reference number exists, it is not\ndeleted, it has reached an issued status, and the surname, first name, middle\nname and date of birth all match.\n\nEvery unsuccessful case produces the same INVALID body. The endpoint will not\nreveal whether the reference number exists or which field failed, because that\nwould make it usable for harvesting other people's details.\n\nOn VALID the response carries short-lived relative URLs for the cardholder's\nphotograph and signature. Fetching them needs the postalid.images scope.\n",
+        "description": "Checks the submitted details against the enrollment record identified by the\npostal reference number, and answers VALID or INVALID.\n\nVALID requires all of: a record with that reference number exists, it is not\ndeleted, it has reached an issued status, and the surname, first name, middle\nname and date of birth all match.\n\nA VALID response carries the cardholder details as printed on the card, the\ncard's validity window, and short-lived relative URLs for the photograph and\nsignature. Fetching the images needs the postalid.images scope.\n\nExpiry is derived, not supplied by the source data: it is the card's production\ndate plus a configured validity period, and is flagged as derived. An expired\ncard still returns VALID with validity.status = EXPIRED, because the identity\ndid check out - read validity.status and apply your own policy.\n\nEvery unsuccessful case produces the same INVALID body. The endpoint will not\nreveal whether the reference number exists or which field failed, because that\nwould make it usable for harvesting other people's details. Clients granted the\npostalid.diagnostics scope additionally receive a reason object naming every\nmismatched field.\n",
         "operationId": "verify",
         "requestBody": {
           "content": {
@@ -53,7 +53,7 @@
         },
         "responses": {
           "200": {
-            "description": "Verification completed. Inspect `result` for the answer.",
+            "description": "Verification completed. Inspect `result` for the answer, and on VALID also `validity.status` before treating the card as current.",
             "content": {
               "*/*": {
                 "schema": {
@@ -189,6 +189,187 @@
           "postalRefNo"
         ]
       },
+      "CardValidity": {
+        "type": "object",
+        "description": "Issue and expiry dates for the card",
+        "properties": {
+          "issuedOn": {
+            "type": "string",
+            "format": "date",
+            "description": "Date the card was produced",
+            "example": "2024-02-14"
+          },
+          "expiresOn": {
+            "type": "string",
+            "format": "date",
+            "description": "Derived expiry date; null when it could not be computed",
+            "example": "2027-02-14"
+          },
+          "status": {
+            "type": "string",
+            "description": "ACTIVE while current, EXPIRED once past expiry, UNKNOWN when no issue date could be established",
+            "enum": [
+              "ACTIVE",
+              "EXPIRED",
+              "UNKNOWN"
+            ],
+            "example": "ACTIVE"
+          },
+          "daysUntilExpiry": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Days until expiry; negative once expired",
+            "example": 1078
+          },
+          "derived": {
+            "type": "boolean",
+            "description": "Always true: expiry is computed from the issue date, not supplied by the source data",
+            "example": true
+          }
+        }
+      },
+      "CardholderAddress": {
+        "type": "object",
+        "description": "Home address as printed on the card",
+        "properties": {
+          "houseBldgLot": {
+            "type": "string",
+            "description": "House, building or lot",
+            "example": "BLK 7 LOT 2"
+          },
+          "street": {
+            "type": "string",
+            "description": "Street",
+            "example": "MABINI ST"
+          },
+          "subdivision": {
+            "type": "string",
+            "description": "Subdivision",
+            "example": "GREENVIEW SUBDIVISION"
+          },
+          "barangay": {
+            "type": "string",
+            "description": "Barangay",
+            "example": "BARANGAY SAN ROQUE"
+          },
+          "city": {
+            "type": "string",
+            "description": "City or municipality",
+            "example": "City of Calamba"
+          },
+          "province": {
+            "type": "string",
+            "description": "Province code",
+            "example": "BTG"
+          },
+          "postalCode": {
+            "type": "string",
+            "description": "Postal code",
+            "example": "4027"
+          },
+          "country": {
+            "type": "string",
+            "description": "Country code",
+            "example": "PHL"
+          }
+        }
+      },
+      "CardholderDetails": {
+        "type": "object",
+        "description": "Cardholder details as printed on the Postal ID card",
+        "properties": {
+          "postalRefNo": {
+            "type": "string",
+            "description": "Postal reference number, echoed back",
+            "example": "A11230000001"
+          },
+          "firstName": {
+            "type": "string",
+            "description": "Given name",
+            "example": "JUAN"
+          },
+          "middleName": {
+            "type": "string",
+            "description": "Middle name",
+            "example": "SANTOS"
+          },
+          "lastName": {
+            "type": "string",
+            "description": "Surname",
+            "example": "DELA CRUZ"
+          },
+          "suffix": {
+            "type": "string",
+            "description": "Name suffix such as JR or III",
+            "example": "JR"
+          },
+          "dateOfBirth": {
+            "type": "string",
+            "format": "date",
+            "description": "Date of birth",
+            "example": "1990-01-31"
+          },
+          "gender": {
+            "type": "string",
+            "description": "Gender as recorded",
+            "example": "F"
+          },
+          "nationality": {
+            "type": "string",
+            "description": "Nationality",
+            "example": "Filipino"
+          },
+          "address": {
+            "$ref": "#/components/schemas/CardholderAddress",
+            "description": "Home address as printed on the card"
+          },
+          "issuingPostOffice": {
+            "type": "string",
+            "description": "Post office that issued the card",
+            "example": "PPC-TANAUAN"
+          },
+          "enrolledOn": {
+            "type": "string",
+            "format": "date",
+            "description": "Date the holder enrolled",
+            "example": "2024-02-01"
+          }
+        }
+      },
+      "VerificationFailure": {
+        "type": "object",
+        "description": "Reason for an INVALID result. Requires the postalid.diagnostics scope.",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Machine-readable failure code",
+            "enum": [
+              "NO_SUCH_RECORD",
+              "RECORD_DELETED",
+              "CARD_NOT_ISSUED",
+              "CARD_EXPIRED",
+              "FIELD_MISMATCH"
+            ],
+            "example": "FIELD_MISMATCH"
+          },
+          "mismatchedFields": {
+            "type": "array",
+            "description": "Request fields that did not match the stored record. Present only for FIELD_MISMATCH, and listing every field that failed, not just the first.",
+            "example": [
+              "lastName",
+              "dateOfBirth"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable summary for logs and support",
+            "example": "2 field(s) did not match the stored record"
+          }
+        }
+      },
       "VerifyResponse": {
         "type": "object",
         "description": "Outcome of a Postal ID verification",
@@ -206,12 +387,20 @@
             "type": "string",
             "format": "date-time",
             "description": "When the check ran",
-            "example": "2026-08-18T04:21:07Z"
+            "example": "2026-08-21T04:21:07Z"
           },
           "requestId": {
             "type": "string",
             "description": "Correlation id, also written to the audit trail; quote it in support requests",
             "example": "0f4b7c2e-6d1a-4f83-9c55-2a1f9e0b77d1"
+          },
+          "cardholder": {
+            "$ref": "#/components/schemas/CardholderDetails",
+            "description": "Present only on VALID. Cardholder details as printed on the card."
+          },
+          "validity": {
+            "$ref": "#/components/schemas/CardValidity",
+            "description": "Present only on VALID. Issue and derived expiry dates. Read `status` before treating the card as current."
           },
           "images": {
             "type": "object",
@@ -229,6 +418,10 @@
             "format": "int64",
             "description": "Present only on VALID. Seconds until the image URLs stop working.",
             "example": 300
+          },
+          "reason": {
+            "$ref": "#/components/schemas/VerificationFailure",
+            "description": "Present only on INVALID, and only for clients holding the postalid.diagnostics scope."
           }
         }
       }
@@ -242,7 +435,8 @@
             "tokenUrl": "http://localhost:8080/oauth2/token",
             "scopes": {
               "postalid.verify": "Submit Postal ID verification requests",
-              "postalid.images": "Retrieve the photo and signature of a verified cardholder"
+              "postalid.images": "Retrieve the photo and signature of a verified cardholder",
+              "postalid.diagnostics": "Receive the reason and mismatched fields on an INVALID result. Granted per client; without it every INVALID is identical."
             }
           }
         }
