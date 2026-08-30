@@ -36,6 +36,11 @@ spring:
     virtual:
       enabled: true
 
+  lifecycle:
+    # Upper bound on graceful shutdown; past this, remaining requests are dropped rather than
+    # holding the process open through a deploy.
+    timeout-per-shutdown-phase: 25s
+
 server:
   port: ${SERVER_PORT:8443}
   ssl:
@@ -44,6 +49,22 @@ server:
     key-store-type: PKCS12
     key-store-password: ${POSTALID_SSL_KEYSTORE_PASSWORD:}
     key-alias: ${POSTALID_SSL_KEY_ALIAS:postalid}
+  # Finish in-flight verifications before exiting, so a redeploy does not cut an operator off
+  # mid-check or lose the audit row for an attempt that already happened.
+  shutdown: graceful
+
+  # Caps on what a single request may cost. Without these one caller can hold a connection open
+  # indefinitely or post an arbitrarily large body, both of which are cheap denial of service.
+  tomcat:
+    connection-timeout: 20s
+    keep-alive-timeout: 15s
+    max-http-form-post-size: 64KB
+    max-swallow-size: 64KB
+    max-connections: ${POSTALID_MAX_CONNECTIONS:8192}
+    threads:
+      max: ${POSTALID_MAX_THREADS:200}
+  max-http-request-header-size: 16KB
+
   error:
     # An error page that quotes the exception is an information leak.
     include-message: never
@@ -67,7 +88,30 @@ management:
     health:
       probes:
         enabled: true
-      show-details: never
+      # Anonymous callers still see nothing but UP/DOWN. An authenticated operator sees which
+      # component is unhealthy, which is the difference between a useful probe and a shrug.
+      show-details: when-authorized
+      show-components: when-authorized
+      roles: OPERATOR
+      group:
+        # Readiness gates traffic, so it covers everything an answer depends on. Without
+        # blobStore here an instance whose storage vanished keeps taking requests and returns
+        # VALID results whose images all 404.
+        readiness:
+          include: readinessState,db,blobStore
+        # Liveness answers only "would a restart help". A storage outage or a database outage
+        # would not be fixed by one, and failing liveness on those produces a crash loop.
+        liveness:
+          include: livenessState
+  health:
+    # A verification is answerable only if the database is reachable and the photographs are
+    # readable, so both gate readiness. Liveness stays narrow on purpose: restarting the process
+    # will not remount a filesystem, and a liveness probe that fails on a storage outage just
+    # produces a crash loop.
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
 
 springdoc:
   api-docs:
@@ -112,6 +156,11 @@ postalid:
   ingest:
     source-dir: ${POSTALID_INGEST_DIR:./files}
     fail-fast: false
+
+  limits:
+    # A verification body is five short fields. Anything larger is a mistake or an attack, and
+    # is refused on Content-Length before the body is read.
+    max-request-bytes: 16384
 
   rate-limit:
     enabled: true

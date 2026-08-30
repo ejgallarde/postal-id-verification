@@ -16,8 +16,14 @@
 <body>
 <header th:fragment="header" class="site-header">
   <div class="wrap header-inner">
+    <!--
+      The logo is a supplied asset, so the wordmark stands in when it is absent rather than
+      leaving a broken image on the page that vouches for someone's identity.
+    -->
     <a class="brand" th:href="@{/}">
-      <span class="brand-mark" aria-hidden="true">PID</span>
+      <img th:if="${brandLogoAvailable}" class="brand-logo"
+           th:src="@{/img/phlpost-logo.png}" alt="PHLPost">
+      <span th:unless="${brandLogoAvailable}" class="brand-mark" aria-hidden="true">PID</span>
       <span class="brand-text">Postal ID Verification</span>
     </a>
     <form th:action="@{/logout}" method="post" class="logout-form"

@@ -376,6 +376,10 @@ Errors are RFC 9457 problem documents, `Content-Type: application/problem+json`.
 | `401` | — | Token missing, expired, malformed, or not for this audience |
 | `403` | — | Token valid but lacks the required scope |
 | `404` | — | Image reference unknown, expired or exhausted |
+| `413` | `payload-too-large` | Request body above the size cap; refused before it is parsed |
+| `415` | — | Unsupported `Content-Type`; send `application/json` |
+| `406` | — | Requested representation is unavailable; this API returns JSON |
+| `405` | — | Wrong HTTP method |
 | `429` | `rate-limited` | Budget exceeded. See `Retry-After` and `retryAfterSeconds` |
 | `500` | `internal-error` | Unexpected fault. `reference` correlates with the server log |
 

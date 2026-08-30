@@ -41,9 +41,14 @@ public class RateLimiter {
                 .build();
     }
 
-    /** What a limit check decided, and how long to wait if it said no. */
-    public record Decision(boolean allowed, long retryAfterSeconds) {
-        static final Decision ALLOWED = new Decision(true, 0);
+    /**
+     * What a limit check decided, how long to wait if it said no, and how much budget is left.
+     *
+     * <p>{@code remaining} is published to callers as a RateLimit header so they can pace
+     * themselves, rather than discovering the ceiling only by being refused.
+     */
+    public record Decision(boolean allowed, long retryAfterSeconds, long remaining) {
+        static final Decision ALLOWED = new Decision(true, 0, Long.MAX_VALUE);
     }
 
     public Decision checkVerifyByClient(String clientId) {
@@ -66,11 +71,11 @@ public class RateLimiter {
         Bucket bucket = buckets.get(key, ignored -> newBucket(permitsPerMinute));
         ConsumptionProbe probe = bucket.tryConsumeAndReturnRemaining(1);
         if (probe.isConsumed()) {
-            return Decision.ALLOWED;
+            return new Decision(true, 0, probe.getRemainingTokens());
         }
 
         long retryAfter = Math.max(1, TimeUnit.NANOSECONDS.toSeconds(probe.getNanosToWaitForRefill()));
-        return new Decision(false, retryAfter);
+        return new Decision(false, retryAfter, 0);
     }
 
     private static Bucket newBucket(int permitsPerMinute) {

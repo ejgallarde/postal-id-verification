@@ -1,39 +1,58 @@
 package com.postalid.verification.api;
 
+import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
-import org.springframework.web.ErrorResponseException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.WebRequest;
+import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
 import java.net.URI;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * Turns failures into RFC 9457 problem documents.
  *
+ * <p>Extends {@link ResponseEntityExceptionHandler} so the whole family of standard Spring MVC
+ * faults — unsupported media type, unacceptable representation, wrong method, missing parameter —
+ * gets its correct 4xx status. Previously only the cases with an explicit handler were mapped and
+ * everything else fell through to the catch-all, so a client sending the wrong {@code Content-Type}
+ * was told the <em>server</em> had failed, and a routine client mistake logged a stack trace.
+ *
  * <p>Validation problems name the offending fields, because those are the caller's own inputs and
  * telling them is how they fix the call. Everything else is answered generically: an unexpected
- * exception yields a request id and nothing more, with the detail going to the log. Echoing a
+ * exception yields a reference and nothing more, with the detail going to the log. Echoing a
  * message from deep in the stack is how database structure and file paths escape into responses.
  */
 @RestControllerAdvice(basePackages = "com.postalid.verification.api")
-public class ApiExceptionHandler {
+public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
     private static final String PROBLEM_BASE = "https://postalid.example/problems/";
 
-    @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ProblemDetail handleValidation(MethodArgumentNotValidException e) {
+    /**
+     * Field-level detail for validation failures.
+     *
+     * <p>Overrides the parent so the response keeps the {@code errors} map clients rely on; the
+     * inherited version reports only that validation failed.
+     */
+    @Override
+    protected ResponseEntity<Object> handleMethodArgumentNotValid(MethodArgumentNotValidException e,
+                                                                  HttpHeaders headers,
+                                                                  HttpStatusCode status,
+                                                                  WebRequest request) {
         Map<String, String> errors = new LinkedHashMap<>();
         e.getBindingResult().getFieldErrors()
                 .forEach(error -> errors.putIfAbsent(error.getField(), error.getDefaultMessage()));
@@ -43,17 +62,27 @@ public class ApiExceptionHandler {
         problem.setTitle("Validation Failed");
         problem.setDetail("One or more fields are missing or malformed.");
         problem.setProperty("errors", errors);
-        return problem;
+
+        return ResponseEntity.badRequest().body(problem);
     }
 
-    @ExceptionHandler(HttpMessageNotReadableException.class)
-    public ProblemDetail handleUnreadable(HttpMessageNotReadableException e) {
+    /**
+     * A malformed body, reported without quoting it.
+     *
+     * <p>The parser's own message repeats the input it choked on, which on this endpoint is
+     * somebody's name and date of birth.
+     */
+    @Override
+    protected ResponseEntity<Object> handleHttpMessageNotReadable(HttpMessageNotReadableException e,
+                                                                  HttpHeaders headers,
+                                                                  HttpStatusCode status,
+                                                                  WebRequest request) {
         ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
         problem.setType(URI.create(PROBLEM_BASE + "malformed-request"));
         problem.setTitle("Malformed Request");
-        // The parser's own message can quote the body it choked on, which may be personal data.
         problem.setDetail("The request body could not be parsed as JSON matching the expected schema.");
-        return problem;
+
+        return ResponseEntity.badRequest().body(problem);
     }
 
     @ExceptionHandler(RateLimitExceededException.class)
@@ -69,17 +98,10 @@ public class ApiExceptionHandler {
                 .body(problem);
     }
 
-    /**
-     * Passes through exceptions that already carry the status they want.
-     *
-     * <p>Without this, the catch-all below would turn a deliberate 404 from the image endpoint
-     * into a 500 — which is both wrong and, because a 500 reads as "something broke here" rather
-     * than "no such thing", a hint that the reference was interesting.
-     */
-    @ExceptionHandler(ErrorResponseException.class)
-    public ResponseEntity<ProblemDetail> handleErrorResponse(ErrorResponseException e) {
-        return ResponseEntity.status(e.getStatusCode()).body(e.getBody());
-    }
+    // ErrorResponseException — and so ResponseStatusException, which the image endpoint throws
+    // for an unusable reference — is handled by the parent, which already returns the status and
+    // problem body the exception carries. Declaring it here as well is an ambiguous mapping and
+    // stops the context starting.
 
     /**
      * Authentication and authorization failures belong to Spring Security's translation filter,
@@ -91,16 +113,24 @@ public class ApiExceptionHandler {
         throw e;
     }
 
+    /**
+     * The genuine unknowns.
+     *
+     * <p>Reached only after the parent has had its say, so anything landing here really is
+     * unexpected and deserves the stack trace it gets.
+     */
     @ExceptionHandler(Exception.class)
-    public ProblemDetail handleUnexpected(Exception e) {
-        String reference = java.util.UUID.randomUUID().toString();
-        log.error("Unhandled exception [{}]", reference, e);
+    public ResponseEntity<ProblemDetail> handleUnexpected(Exception e, HttpServletRequest request) {
+        String reference = UUID.randomUUID().toString();
+        log.error("Unhandled exception [{}] on {} {}", reference, request.getMethod(),
+                request.getRequestURI(), e);
 
         ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.INTERNAL_SERVER_ERROR);
         problem.setType(URI.create(PROBLEM_BASE + "internal-error"));
         problem.setTitle("Internal Server Error");
         problem.setDetail("The request could not be completed. Quote the reference when reporting this.");
         problem.setProperty("reference", reference);
-        return problem;
+
+        return ResponseEntity.internalServerError().body(problem);
     }
 }

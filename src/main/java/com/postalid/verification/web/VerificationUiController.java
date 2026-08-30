@@ -24,6 +24,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.ui.Model;
 
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.Map;
 import java.util.UUID;
 
@@ -44,18 +47,25 @@ import static org.springframework.http.HttpStatus.NOT_FOUND;
 @Controller
 public class VerificationUiController {
 
+    /** Shown on the comparison view's provenance band. */
+    private static final DateTimeFormatter VERIFIED_AT =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm 'UTC'").withZone(ZoneOffset.UTC);
+
     private final VerificationFacade verificationFacade;
     private final ImageDeliveryService imageDeliveryService;
     private final CardResponseMapper mapper;
+    private final QrCodeRenderer qrCodeRenderer;
     private final PostalIdProperties properties;
 
     public VerificationUiController(VerificationFacade verificationFacade,
                                     ImageDeliveryService imageDeliveryService,
                                     CardResponseMapper mapper,
+                                    QrCodeRenderer qrCodeRenderer,
                                     PostalIdProperties properties) {
         this.verificationFacade = verificationFacade;
         this.imageDeliveryService = imageDeliveryService;
         this.mapper = mapper;
+        this.qrCodeRenderer = qrCodeRenderer;
         this.properties = properties;
     }
 
@@ -105,12 +115,19 @@ public class VerificationUiController {
         model.addAttribute("signatureRef", references.get(DocumentType.SIGNATURE));
         model.addAttribute("expiresInSeconds", properties.getMedia().getTokenTtl().toSeconds());
 
-        // The operator is holding the card, so showing what the record says lets them compare it
-        // line by line. Same field selection as the API: only what the card itself prints.
+        // The operator is holding the card, so the record is laid out in the same field positions
+        // the card uses. Same field selection as the API: only what the card itself prints.
         if (result.valid()) {
+            String verifiedAt = VERIFIED_AT.format(Instant.now());
+
             model.addAttribute("cardholder",
                     result.outcome().matchedCardholder().map(mapper::toDetails).orElse(null));
             model.addAttribute("validity", mapper.toValidity(result.outcome().validity()));
+            model.addAttribute("verifiedAt", verifiedAt);
+
+            // Encodes the verification, not the cardholder: it resolves to the audit row and
+            // carries no personal data, so a screenshot leaks nothing machine-readable.
+            model.addAttribute("qrSvg", qrCodeRenderer.toSvg(requestId, verifiedAt));
         }
 
         return "result";

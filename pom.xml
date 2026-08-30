@@ -24,6 +24,7 @@
     <twelvemonkeys.version>3.14.0</twelvemonkeys.version>
     <bucket4j.version>8.19.0</bucket4j.version>
     <commons-csv.version>1.14.1</commons-csv.version>
+    <zxing.version>3.5.4</zxing.version>
   </properties>
 
   <dependencies>
@@ -108,6 +109,17 @@
       <groupId>org.apache.commons</groupId>
       <artifactId>commons-csv</artifactId>
       <version>${commons-csv.version}</version>
+    </dependency>
+
+    <!--
+      QR encoding for the comparison view. Only 'core' is needed: it yields a BitMatrix, which we
+      render as inline SVG ourselves. The 'javase' artifact would add BufferedImage helpers we have
+      no use for.
+    -->
+    <dependency>
+      <groupId>com.google.zxing</groupId>
+      <artifactId>core</artifactId>
+      <version>${zxing.version}</version>
     </dependency>
 
     <!-- API documentation -->

@@ -467,11 +467,9 @@ footer.doc {
   .shell { grid-template-columns: minmax(0, 1fr); gap: 0; }
   main { max-width: 78ch; margin: 0 auto; }
   .jump { display: flex; flex-wrap: wrap; gap: 18px; margin: 0 0 4px; padding: 0; list-style: none; }
-  .jump a {
-    font-family: "IBM Plex Mono", ui-monospace, monospace;
-    font-size: 12.5px; text-decoration: none; color: var(--ink-mid);
-    border-bottom: 1px solid var(--rule-strong); padding-bottom: 2px;
-  }
+  .jump a { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 12.5px;
+            text-decoration: none; color: var(--ink-mid);
+            border-bottom: 1px solid var(--rule-strong); padding-bottom: 2px; }
   .jump a:hover { color: var(--accent); border-bottom-color: var(--accent); }
   .jump a span { color: var(--accent); }
   .provenance { font-size: 13.5px; color: var(--ink-soft); margin: 26px 0 0; }
@@ -500,7 +498,6 @@ footer.doc {
     </ul>
   </div>
 </header>
-
 <div class="shell">
   <main>
     <section id="s6">
@@ -872,6 +869,10 @@ $result.result
             <tr><td class="num-col">401</td><td>&mdash;</td><td>Token missing, expired, or not for this audience</td></tr>
             <tr><td class="num-col">403</td><td>&mdash;</td><td>Token valid but lacks the required scope</td></tr>
             <tr><td class="num-col">404</td><td>&mdash;</td><td>Image reference unknown, expired or exhausted</td></tr>
+                        <tr><td class="num-col">405</td><td>&mdash;</td><td>Wrong HTTP method</td></tr>
+            <tr><td class="num-col">406</td><td>&mdash;</td><td>Requested representation unavailable; this API returns JSON</td></tr>
+            <tr><td class="num-col">413</td><td><code>payload-too-large</code></td><td>Body above the size cap, refused before it is parsed</td></tr>
+            <tr><td class="num-col">415</td><td>&mdash;</td><td>Unsupported <code>Content-Type</code>; send <code>application/json</code></td></tr>
             <tr><td class="num-col">429</td><td><code>rate-limited</code></td><td>Budget exceeded; see <code>Retry-After</code></td></tr>
             <tr><td class="num-col">500</td><td><code>internal-error</code></td><td>Unexpected fault; <code>reference</code> correlates with the server log</td></tr>
           </tbody>
@@ -911,12 +912,28 @@ $result.result
         Both verification budgets must pass. Tokens refill continuously rather than resetting on the
         minute, so a caller that paces itself is never blocked by a boundary.
       </p>
+      <p>Every successful verification publishes the caller&rsquo;s remaining budget:</p>
+      <div class="code">
+        <div class="code-head"><span>response headers</span><span>budget</span></div>
+<pre><code>RateLimit-Limit: 300
+RateLimit-Remaining: 299
+RateLimit-Policy: 300;w=60</code></pre>
+      </div>
+      <div class="note warn">
+        <span class="tag">Repeated failures are throttled separately</span>
+        <p>
+          A caller returning <span class="pill i">INVALID</span> twenty times in a row is held off
+          for five minutes, independently of the per-minute budget. A legitimate integration checks
+          cards people actually hold, so its failure rate is low; a long unbroken run of failures is
+          what walking a range of reference numbers looks like. One success clears the run, so an
+          occasional typo never accumulates.
+        </p>
+      </div>
     </section>
 
     <!-- ============ 8 ============ -->
   </main>
 </div>
-
 <footer class="doc">
   <p>
     Sections 6 and 7 of the Postal ID Verification system documentation &middot; version 1.0.0-SNAPSHOT.

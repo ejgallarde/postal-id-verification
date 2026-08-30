@@ -7,6 +7,7 @@ import com.postalid.verification.config.PostalIdProperties;
 import com.postalid.verification.domain.DocumentType;
 import com.postalid.verification.verify.VerificationFacade;
 import com.postalid.verification.verify.VerificationQuery;
+import com.postalid.verification.web.EnumerationThrottle;
 import com.postalid.verification.web.RateLimiter;
 import com.postalid.verification.web.RequestContextSupport;
 import io.swagger.v3.oas.annotations.Operation;
@@ -48,15 +49,18 @@ public class VerificationController {
 
     private final VerificationFacade verificationFacade;
     private final RateLimiter rateLimiter;
+    private final EnumerationThrottle enumerationThrottle;
     private final CardResponseMapper mapper;
     private final PostalIdProperties properties;
 
     public VerificationController(VerificationFacade verificationFacade,
                                   RateLimiter rateLimiter,
+                                  EnumerationThrottle enumerationThrottle,
                                   CardResponseMapper mapper,
                                   PostalIdProperties properties) {
         this.verificationFacade = verificationFacade;
         this.rateLimiter = rateLimiter;
+        this.enumerationThrottle = enumerationThrottle;
         this.mapper = mapper;
         this.properties = properties;
     }
@@ -114,6 +118,13 @@ public class VerificationController {
             throw new RateLimitExceededException(decision.retryAfterSeconds());
         }
 
+        // A caller failing repeatedly is walking reference numbers, not checking cards people
+        // hold. The per-minute budget alone would let that continue indefinitely at a patient rate.
+        long penalty = enumerationThrottle.retryAfterSeconds(clientId);
+        if (penalty > 0) {
+            throw new RateLimitExceededException(penalty);
+        }
+
         String requestId = UUID.randomUUID().toString();
         VerificationContext context = new VerificationContext(
                 requestId,
@@ -132,6 +143,12 @@ public class VerificationController {
 
         VerificationFacade.Result result = verificationFacade.verify(query, context);
 
+        if (result.valid()) {
+            enumerationThrottle.recordSuccess(clientId);
+        } else {
+            enumerationThrottle.recordFailure(clientId);
+        }
+
         VerifyResponse body = result.valid()
                 ? buildValidResponse(requestId, result)
                 : buildInvalidResponse(requestId, result);
@@ -142,6 +159,11 @@ public class VerificationController {
                 .header(HttpHeaders.CACHE_CONTROL, "no-store")
                 .header(HttpHeaders.PRAGMA, "no-cache")
                 .header("X-Request-Id", requestId)
+                // Budget headers, so a client can pace itself rather than learning the ceiling
+                // only when it is refused. Names follow the IETF RateLimit header field draft.
+                .header("RateLimit-Limit", String.valueOf(properties.getRateLimit().getVerifyPerClientPerMinute()))
+                .header("RateLimit-Remaining", String.valueOf(decision.remaining()))
+                .header("RateLimit-Policy", properties.getRateLimit().getVerifyPerClientPerMinute() + ";w=60")
                 .body(body);
     }
 

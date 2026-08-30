@@ -10,8 +10,11 @@
     --line: #dbe1e8;
     --bg: #f4f6f9;
     --surface: #ffffff;
-    --accent: #1c4f8b;
-    --accent-dark: #143a68;
+    /* PHLPost navy and red, taken from the corporate mark. */
+    --accent: #1b3a6b;
+    --accent-dark: #12294c;
+    --phl-red: #c8102e;
+    --phl-gold: #f5a800;
     --valid: #1a7f4b;
     --valid-bg: #e8f6ee;
     --invalid: #b3261e;
@@ -65,7 +68,6 @@ body.centered {
     border-radius: 5px;
 }
 
-.brand-text { font-weight: 600; }
 
 .logout-form { display: flex; align-items: center; gap: 12px; margin: 0; }
 .operator { color: var(--ink-soft); font-size: 14px; }
@@ -184,25 +186,6 @@ input:focus {
 .verdict-valid { background: var(--valid-bg); color: var(--valid); }
 .verdict-invalid { background: var(--invalid-bg); color: var(--invalid); }
 
-/* --- Captured images --- */
-
-.images { display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-start; margin-top: 16px; }
-
-.images figure { margin: 0; }
-
-.images img {
-    display: block;
-    max-width: 100%;
-    border: 1px solid var(--line);
-    border-radius: 7px;
-    background: #fff;
-}
-
-.images figure:not(.signature) img { width: 200px; }
-.images figure.signature img { width: 340px; padding: 8px; }
-
-figcaption { font-size: 13px; color: var(--ink-soft); margin-top: 7px; }
-
 .request-id { font-size: 12.5px; color: var(--ink-soft); margin-top: 24px; }
 .request-id code { font-family: ui-monospace, Consolas, monospace; }
 
@@ -211,48 +194,232 @@ figcaption { font-size: 13px; color: var(--ink-soft); margin-top: 7px; }
     .images figure.signature img { width: 100%; }
 }
 
-/* --- Record details panel --- */
+/* --- Brand mark --- */
 
-.details { margin: 0; display: grid; gap: 0; border-top: 1px solid var(--line); }
+.brand-logo { display: block; height: 30px; width: auto; }
 
-.details > div {
-    display: grid;
-    grid-template-columns: 170px minmax(0, 1fr);
-    gap: 16px;
-    padding: 9px 0;
-    border-bottom: 1px solid var(--line);
-}
-
-.details dt { font-size: 13px; font-weight: 600; color: var(--ink-soft); margin: 0; }
-.details dd { margin: 0; font-size: 15px; }
-.details dd.mono { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; letter-spacing: .03em; }
-
-/* --- Validity --- */
-
-.validity {
-    margin-top: 18px;
-    padding: 13px 16px;
-    border: 1px solid var(--line);
-    border-left: 3px solid var(--valid);
-    border-radius: 0 7px 7px 0;
-    background: var(--valid-bg);
-}
-
-.validity-expired { border-left-color: var(--invalid); background: var(--invalid-bg); }
-
-.validity-line { margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; }
-
-.validity-label {
-    font-size: 11px;
+.brand-text {
     font-weight: 600;
-    letter-spacing: .1em;
+    padding-left: 12px;
+    margin-left: 2px;
+    border-left: 1px solid var(--line);
+}
+
+/* --- ID comparison view ------------------------------------------------
+   Mirrors the card's field POSITIONS so an operator can read across from the
+   card in their hand. Deliberately not a facsimile: no guilloche, no ghost
+   photo, no security artwork.
+   ---------------------------------------------------------------------- */
+
+.wrap.wide { max-width: 940px; }
+
+.idcard-panel { margin-bottom: 20px; }
+
+.idcard-frame {
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    overflow: hidden;
+    background: var(--surface);
+    margin-bottom: 14px;
+}
+
+/* Provenance band. Sits above the face so it covers no field, but travels with
+   any screenshot of the card. */
+.idcard-band {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    padding: 7px 14px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 12px;
+    letter-spacing: .02em;
+}
+
+.idcard-band-label {
+    font-weight: 700;
     text-transform: uppercase;
+    letter-spacing: .1em;
+    font-size: 10.5px;
+    background: rgba(255, 255, 255, .16);
+    padding: 2px 7px;
+    border-radius: 3px;
+}
+
+.idcard {
+    background: linear-gradient(160deg, #fdfdfe 0%, #eef1f5 55%, #e4e9ef 100%);
+    padding: 0 0 18px;
+}
+
+.idcard-head {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 12px 20px;
+    background: linear-gradient(100deg, #1b3a6b 0%, #2b4f88 55%, #3a3f45 100%);
+    color: #fff;
+}
+
+.idcard-logo { height: 26px; width: auto; flex: 0 0 auto; }
+
+.idcard-title { display: flex; flex-direction: column; line-height: 1.25; }
+.idcard-republic { font-size: 12px; letter-spacing: .04em; }
+.idcard-corp { font-size: 13px; font-weight: 600; }
+.idcard-doctype {
+    font-size: 15px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+}
+
+.idcard-body {
+    display: grid;
+    grid-template-columns: 190px minmax(0, 1fr);
+    gap: 24px;
+    padding: 20px;
+}
+
+/* --- Left column: photo, PRN, signature --- */
+
+.idcard-left { min-width: 0; }
+
+.idcard-photo {
+    width: 170px;
+    height: 210px;
+    border: 1px solid #c3ccd6;
+    background: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.idcard-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.idcard-missing {
+    font-size: 12px;
+    color: var(--ink-soft);
+    text-align: center;
+    padding: 8px;
+}
+
+.idcard-prn {
+    margin: 10px 0 0;
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: .04em;
+}
+
+.idcard-prn-label { color: var(--ink-soft); font-weight: 500; margin-right: 4px; }
+
+.idcard-signature { margin-top: 14px; }
+.idcard-signature img {
+    display: block;
+    width: 170px;
+    max-height: 46px;
+    object-fit: contain;
+    object-position: left bottom;
+}
+
+.idcard-caption {
+    display: block;
+    margin-top: 3px;
+    padding-top: 3px;
+    border-top: 1px solid var(--ink-soft);
+    width: 170px;
+    font-size: 9.5px;
+    text-transform: uppercase;
+    letter-spacing: .09em;
     color: var(--ink-soft);
 }
 
-.validity strong { font-size: 15px; color: var(--valid); }
-.validity-expired strong { color: var(--invalid); }
+/* --- Right column: the printed fields --- */
 
-@media (max-width: 560px) {
-    .details > div { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+.idcard-right { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+
+.idcard-field { min-width: 0; }
+
+.idcard-label {
+    display: block;
+    font-size: 9.5px;
+    font-style: italic;
+    color: var(--ink-soft);
+    margin-bottom: 2px;
+}
+
+.idcard-name {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: .03em;
+    text-transform: uppercase;
+    line-height: 1.2;
+}
+
+.idcard-address { margin: 0; }
+.idcard-addr-line {
+    display: block;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: .03em;
+    text-transform: uppercase;
+    line-height: 1.35;
+}
+
+.idcard-value {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: .03em;
+    text-transform: uppercase;
+}
+
+.idcard-value.idcard-expired { color: var(--invalid); }
+
+.idcard-derived {
+    color: var(--phl-red);
+    font-weight: 700;
+    margin-left: 2px;
+    cursor: help;
+}
+
+.idcard-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr auto;
+    gap: 16px;
+    align-items: start;
+}
+
+.idcard-grid:last-child { grid-template-columns: 1fr 1fr; }
+
+/* --- QR --- */
+
+.idcard-qr { grid-row: span 2; text-align: center; }
+.idcard-qr .qr {
+    width: 104px;
+    height: 104px;
+    display: block;
+    border: 1px solid #c3ccd6;
+    background: #fff;
+}
+
+.idcard-qr-caption {
+    display: block;
+    margin-top: 4px;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    color: var(--ink-soft);
+}
+
+.idcard-footnote { margin-top: 10px; }
+
+@media (max-width: 720px) {
+    .idcard-body { grid-template-columns: minmax(0, 1fr); gap: 18px; }
+    .idcard-grid, .idcard-grid:last-child { grid-template-columns: minmax(0, 1fr); }
+    .idcard-qr { grid-row: auto; text-align: left; }
+    .idcard-name { font-size: 19px; }
 }

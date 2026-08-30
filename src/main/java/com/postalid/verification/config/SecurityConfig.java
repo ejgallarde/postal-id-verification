@@ -1,6 +1,7 @@
 package com.postalid.verification.config;
 
 import com.postalid.verification.web.RateLimitFilter;
+import jakarta.servlet.DispatcherType;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
@@ -19,6 +20,7 @@ import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter;
 import org.springframework.security.web.header.writers.XXssProtectionHeaderWriter;
+import org.springframework.security.web.session.HttpSessionEventPublisher;
 
 import java.util.List;
 
@@ -76,7 +78,13 @@ public class SecurityConfig {
                                               WebUiProperties webUiProperties) throws Exception {
         http
                 .authorizeHttpRequests(auth -> {
-                    auth.requestMatchers("/login", "/css/**", "/favicon.ico").permitAll();
+                    // Container-generated error forwards. Without this an anonymous 404 is
+                    // redirected to the login page, which tells a caller that every unknown path
+                    // needs a session and turns a missing asset into a confusing bounce.
+                    auth.dispatcherTypeMatchers(DispatcherType.ERROR).permitAll();
+
+                    // Branding assets must load on the login page, before a session exists.
+                    auth.requestMatchers("/login", "/css/**", "/img/**", "/favicon.ico").permitAll();
                     auth.requestMatchers("/actuator/health", "/actuator/health/**").permitAll();
 
                     // The API contract describes an endpoint over personal data. An operator
@@ -97,7 +105,12 @@ public class SecurityConfig {
                         .deleteCookies("JSESSIONID"))
                 .sessionManagement(session -> session
                         .sessionFixation(sessionFixation -> sessionFixation.newSession())
-                        .maximumSessions(2))
+                        // Concurrent-session control depends on the container telling Spring
+                        // Security when a session ends; see httpSessionEventPublisher below.
+                        // Without that the registry never frees a slot and an operator who has
+                        // simply closed their browser twice is locked out until expiry.
+                        .maximumSessions(2)
+                        .maxSessionsPreventsLogin(false))
                 .csrf(Customizer.withDefaults())
                 .addFilterBefore(rateLimitFilter, UsernamePasswordAuthenticationFilter.class);
 
@@ -136,6 +149,18 @@ public class SecurityConfig {
                         .maxAgeInSeconds(31536000))
                 .permissionsPolicyHeader(permissions -> permissions
                         .policy("camera=(), microphone=(), geolocation=(), payment=()")));
+    }
+
+    /**
+     * Publishes container session lifecycle events to Spring Security.
+     *
+     * <p>Required for {@code maximumSessions} to work: without it the session registry never
+     * learns that a session was destroyed, so closed browsers keep occupying slots and the limit
+     * eventually locks the operator out of their own console.
+     */
+    @Bean
+    public HttpSessionEventPublisher httpSessionEventPublisher() {
+        return new HttpSessionEventPublisher();
     }
 
     /**

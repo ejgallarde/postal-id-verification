@@ -78,6 +78,29 @@ ingester writes the same normalized form into the `*_norm` columns, so stored an
 can never be normalized differently. A middle **initial** is accepted where the record holds a
 full middle name, because many cards print only the initial.
 
+### The operator console shows a card-shaped comparison view
+
+On a VALID result the console lays the record out in the **same field positions as the printed
+Postal ID** — photograph, name, address, date of birth, nationality, issuing post office, valid
+until, PRN and signature — so an operator can read straight across from the card in their hand
+instead of hunting down a list.
+
+It mirrors the card's *layout*, not its security printing: no guilloche, no ghost photo, no
+building watermark. A provenance band above the card face carries the operator name, the
+timestamp and the words *screen record, not a card*, so a screenshot of the page cannot pass for
+an image of a card. `Valid Until` is marked with a dagger and footnoted, because ours is
+calculated while the printed card's is authoritative.
+
+The QR encodes the **verification**, not the cardholder: `PIDV:{requestId}` plus the timestamp,
+which resolves to the audit row. It deliberately carries no personal data, so a scanned
+screenshot yields a reference rather than somebody's identity.
+
+#### PHLPost branding
+
+The console uses the PHLPost logo as its primary mark. The file is not in this repository — drop
+it at `src/main/resources/static/img/phlpost-logo.png` and rebuild. Until then the header falls
+back to a text wordmark rather than a broken image; the choice is logged at startup.
+
 ### What a VALID response carries
 
 The cardholder details **as printed on the card** — name, date of birth, gender, nationality,
@@ -263,6 +286,9 @@ All settings live under `postalid.*`. The ones that matter most:
 | `postalid.ingest.max-depth` | `5` | How deep below the source root to search |
 | `postalid.ingest.fail-fast` | `false` | Abort the batch on the first bad packet |
 | `postalid.rate-limit.*` | see below | Per-client and per-address budgets |
+| `postalid.rate-limit.invalid-burst-threshold` | `20` | Consecutive INVALIDs before a caller is throttled |
+| `postalid.rate-limit.invalid-penalty` | `5m` | How long that throttle lasts |
+| `postalid.limits.max-request-bytes` | `16384` | Request bodies larger than this are refused with 413 |
 | `postalid.oauth.issuer` | *(none)* | Public base URL; pins the `iss` claim |
 | `postalid.oauth.jwk.keystore-location` | *(none)* | RSA signing key; ephemeral if unset |
 | `postalid.web.public-api-docs` | `false` | Whether Swagger UI is readable without signing in |
@@ -316,14 +342,29 @@ Uncomment the `postgresql` and `flyway-database-postgresql` dependencies in `pom
 `--spring.profiles.active=postgres`. Flyway picks the PostgreSQL-flavoured OAuth schema
 automatically through the `{vendor}` location; the rest of the migrations are portable.
 
+### Health and probes
+
+`/actuator/health` is the only actuator endpoint exposed. Anonymous callers see `UP` or `DOWN`
+and nothing else; an authenticated operator sees which component is unhealthy.
+
+| Probe | Includes | Why |
+|---|---|---|
+| `/actuator/health/liveness` | process only | Answers "would a restart help". A storage or database outage would not be fixed by one, and failing liveness on those produces a crash loop |
+| `/actuator/health/readiness` | process, database, **blob store** | Gates traffic. An instance whose storage vanished would otherwise keep returning VALID results whose images all 404 |
+
+Two custom indicators: `blobStore` reports whether the photographs are actually readable, and
+`signingKey` flags an ephemeral JWT key — a misconfiguration that otherwise only shows up as
+intermittent 401s after a rolling deploy.
+
 ### Security controls in place
 
 TLS with HSTS · OAuth2 client credentials with scoped, short-lived, audience-pinned JWTs ·
 BCrypt(12) secret hashing · CSRF on the session chain · a CSP that permits nothing off-origin ·
 allow-list input validation · parameterized queries throughout · uniform `INVALID` responses with
-decoy-record timing · dual-axis rate limiting · path-containment on the blob store · pixel budgets
-on image decoding · `no-store` on every response carrying personal data · actuator reduced to
-`/health` · full audit trail with no raw identifiers.
+decoy-record timing · dual-axis rate limiting · **progressive throttling of callers that fail
+repeatedly** · request-size caps · path-containment on the blob store · pixel budgets on image
+decoding · `no-store` on every response carrying personal data · graceful shutdown · actuator
+reduced to `/health` · full audit trail with no raw identifiers.
 
 ---
 

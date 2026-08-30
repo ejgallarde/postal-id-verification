@@ -4,7 +4,7 @@
 <body>
 <header th:replace="~{fragments/layout :: header}"></header>
 
-<main class="wrap">
+<main class="wrap wide">
 
   <!-- VALID -->
   <div th:if="${valid}">
@@ -16,100 +16,162 @@
       </div>
     </div>
 
-    <section class="card" th:if="${cardholder}">
-      <h2>What the record says</h2>
-      <p class="lede">Compare these line by line against the card in your hand.</p>
+    <!--
+      The record laid out in the same field positions as the physical card, so the operator can
+      compare it against the card in their hand without hunting for each value.
 
-      <dl class="details">
-        <div>
-          <dt>ID number</dt>
-          <dd class="mono" th:text="${cardholder.postalRefNo}">—</dd>
-        </div>
-        <div>
-          <dt>Name</dt>
-          <dd>
-            <span th:text="${cardholder.firstName}">—</span>
-            <span th:if="${cardholder.middleName}" th:text="${cardholder.middleName}"></span>
-            <span th:text="${cardholder.lastName}"></span>
-            <span th:if="${cardholder.suffix}" th:text="${cardholder.suffix}"></span>
-          </dd>
-        </div>
-        <div>
-          <dt>Date of birth</dt>
-          <dd th:text="${cardholder.dateOfBirth}">—</dd>
-        </div>
-        <div th:if="${cardholder.gender}">
-          <dt>Gender</dt>
-          <dd th:text="${cardholder.gender}">—</dd>
-        </div>
-        <div th:if="${cardholder.nationality}">
-          <dt>Nationality</dt>
-          <dd th:text="${cardholder.nationality}">—</dd>
-        </div>
-        <div th:if="${cardholder.address}">
-          <dt>Address</dt>
-          <dd>
-            <span th:if="${cardholder.address.houseBldgLot}" th:text="${cardholder.address.houseBldgLot} + ', '"></span>
-            <span th:if="${cardholder.address.street}" th:text="${cardholder.address.street} + ', '"></span>
-            <span th:if="${cardholder.address.subdivision}" th:text="${cardholder.address.subdivision} + ', '"></span>
-            <span th:if="${cardholder.address.barangay}" th:text="${cardholder.address.barangay} + ', '"></span>
-            <span th:if="${cardholder.address.city}" th:text="${cardholder.address.city}"></span>
-            <span th:if="${cardholder.address.province}" th:text="', ' + ${cardholder.address.province}"></span>
-          </dd>
-        </div>
-        <div th:if="${cardholder.issuingPostOffice}">
-          <dt>Issuing post office</dt>
-          <dd th:text="${cardholder.issuingPostOffice}">—</dd>
-        </div>
-        <div th:if="${cardholder.enrolledOn}">
-          <dt>Enrolled</dt>
-          <dd th:text="${cardholder.enrolledOn}">—</dd>
-        </div>
-      </dl>
-
-      <!-- Expiry is inferred, so the page says so rather than presenting it as issued fact. -->
-      <div th:if="${validity}" class="validity"
-           th:classappend="${validity.status == 'EXPIRED'} ? ' validity-expired' : ''">
-        <p class="validity-line">
-          <span class="validity-label">Card validity</span>
-          <strong th:if="${validity.status == 'ACTIVE'}">
-            Active until <span th:text="${validity.expiresOn}">—</span>
-          </strong>
-          <strong th:if="${validity.status == 'EXPIRED'}">
-            Expired on <span th:text="${validity.expiresOn}">—</span>
-          </strong>
-          <strong th:if="${validity.status == 'UNKNOWN'}">Cannot be determined</strong>
-        </p>
-        <p class="note" th:if="${validity.issuedOn}">
-          Card produced <span th:text="${validity.issuedOn}">—</span>. Expiry is calculated from
-          that date, not supplied by the enrollment record — treat it as indicative.
-        </p>
-      </div>
-    </section>
-
-    <section class="card">
-      <h2>Captured at enrollment</h2>
+      This mirrors the card's LAYOUT, not its security printing: no guilloche, no ghost photo, no
+      building watermark. The provenance band above the face marks the output as a screen view, so
+      a screenshot of this page cannot pass for an image of a card.
+    -->
+    <section class="idcard-panel" th:if="${cardholder}">
+      <h2>Compare against the card</h2>
       <p class="lede">
-        Compare these against the card and the person in front of you.
+        Laid out as the card is printed. Every field below comes from the enrollment record, not
+        from what was typed in.
       </p>
 
-      <div class="images">
-        <figure th:if="${photoRef}">
-          <img th:src="@{'/ui/images/' + ${photoRef}}" alt="Cardholder photograph captured at enrollment">
-          <figcaption>Photograph</figcaption>
-        </figure>
-        <figure th:if="${signatureRef}" class="signature">
-          <img th:src="@{'/ui/images/' + ${signatureRef}}" alt="Cardholder signature captured at enrollment">
-          <figcaption>Signature</figcaption>
-        </figure>
+      <div class="idcard-frame">
+        <p class="idcard-band">
+          <span class="idcard-band-label">Verification view</span>
+          <span th:text="${#authentication.name}">operator</span>
+          <span aria-hidden="true">&middot;</span>
+          <span th:text="${verifiedAt}">timestamp</span>
+          <span aria-hidden="true">&middot;</span>
+          <span>screen record, not a card</span>
+        </p>
+
+        <div class="idcard">
+
+          <div class="idcard-head">
+            <img th:if="${brandLogoAvailable}" class="idcard-logo"
+                 th:src="@{/img/phlpost-logo.png}" alt="PHLPost">
+            <div class="idcard-title">
+              <span class="idcard-republic">Republic of the Philippines</span>
+              <span class="idcard-corp">Philippine Postal Corporation</span>
+              <span class="idcard-doctype">Postal Identity Card</span>
+            </div>
+          </div>
+
+          <div class="idcard-body">
+
+            <div class="idcard-left">
+              <div class="idcard-photo">
+                <img th:if="${photoRef}" th:src="@{'/ui/images/' + ${photoRef}}"
+                     alt="Cardholder photograph captured at enrollment">
+                <span th:unless="${photoRef}" class="idcard-missing">No photograph<br>on record</span>
+              </div>
+              <p class="idcard-prn">
+                <span class="idcard-prn-label">PRN</span>
+                <span th:text="${cardholder.postalRefNo}">—</span>
+              </p>
+              <div class="idcard-signature">
+                <img th:if="${signatureRef}" th:src="@{'/ui/images/' + ${signatureRef}}"
+                     alt="Cardholder signature captured at enrollment">
+                <span th:unless="${signatureRef}" class="idcard-missing">No signature on record</span>
+                <span class="idcard-caption">Holder&rsquo;s signature</span>
+              </div>
+            </div>
+
+            <div class="idcard-right">
+
+              <div class="idcard-field">
+                <span class="idcard-label">First Name, Middle Name, Surname, Suffix</span>
+                <p class="idcard-name">
+                  <span th:text="${cardholder.firstName}">—</span>
+                  <span th:if="${cardholder.middleName}" th:text="${cardholder.middleName}"></span>
+                  <span th:text="${cardholder.lastName}"></span>
+                  <span th:if="${cardholder.suffix}" th:text="${cardholder.suffix}"></span>
+                </p>
+              </div>
+
+              <div class="idcard-field" th:if="${cardholder.address}">
+                <span class="idcard-label">Address</span>
+                <p class="idcard-address">
+                  <span class="idcard-addr-line"
+                        th:if="${cardholder.address.houseBldgLot} or ${cardholder.address.street}">
+                    <span th:if="${cardholder.address.houseBldgLot}"
+                          th:text="${cardholder.address.houseBldgLot}"></span>
+                    <span th:if="${cardholder.address.street}"
+                          th:text="${cardholder.address.street}"></span>
+                  </span>
+                  <span class="idcard-addr-line"
+                        th:if="${cardholder.address.barangay} or ${cardholder.address.subdivision}">
+                    <span th:if="${cardholder.address.subdivision}"
+                          th:text="${cardholder.address.subdivision}"></span>
+                    <span th:if="${cardholder.address.barangay}"
+                          th:text="'BRGY. ' + ${cardholder.address.barangay}"></span>
+                  </span>
+                  <span class="idcard-addr-line">
+                    <span th:if="${cardholder.address.postalCode}"
+                          th:text="${cardholder.address.postalCode}"></span>
+                    <span th:if="${cardholder.address.city}" th:text="${cardholder.address.city}"></span>
+                    <span th:if="${cardholder.address.province}"
+                          th:text="${cardholder.address.province}"></span>
+                  </span>
+                </p>
+              </div>
+
+              <div class="idcard-grid">
+                <div class="idcard-field">
+                  <span class="idcard-label">Date of Birth</span>
+                  <p class="idcard-value"
+                     th:text="${#temporals.format(cardholder.dateOfBirth, 'dd MMM yyyy')}">—</p>
+                </div>
+                <div class="idcard-field">
+                  <span class="idcard-label">Nationality</span>
+                  <p class="idcard-value" th:text="${cardholder.nationality} ?: '—'">—</p>
+                </div>
+                <div class="idcard-qr">
+                  <!--
+                    Encodes the verification reference, never the cardholder, so a scanned
+                    screenshot resolves to the audit row rather than leaking personal data.
+                  -->
+                  <div th:if="${qrSvg}" th:utext="${qrSvg}"></div>
+                  <span class="idcard-qr-caption">Verification reference</span>
+                </div>
+              </div>
+
+              <div class="idcard-grid">
+                <div class="idcard-field">
+                  <span class="idcard-label">Issuing Post Office</span>
+                  <p class="idcard-value" th:text="${cardholder.issuingPostOffice} ?: '—'">—</p>
+                </div>
+                <div class="idcard-field" th:if="${validity}">
+                  <span class="idcard-label">Valid Until</span>
+                  <!--
+                    The printed card carries an authoritative expiry. Ours is calculated, so it is
+                    marked rather than presented as though it were issued.
+                  -->
+                  <p class="idcard-value"
+                     th:classappend="${validity.status == 'EXPIRED'} ? ' idcard-expired' : ''">
+                    <span th:if="${validity.expiresOn}"
+                          th:text="${#temporals.format(validity.expiresOn, 'dd MMM yyyy')}">—</span>
+                    <span th:unless="${validity.expiresOn}">Not determinable</span>
+                    <sup class="idcard-derived" th:if="${validity.expiresOn}"
+                         title="Calculated, not printed on the card">&dagger;</sup>
+                  </p>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
       </div>
 
-      <p class="note" th:unless="${photoRef} or ${signatureRef}">
-        No photograph or signature was captured with this record.
+      <p class="note idcard-footnote" th:if="${validity != null and validity.expiresOn != null}">
+        <strong>&dagger;</strong> Valid Until is <strong>calculated</strong> from the card production
+        date, not read from the enrollment record &mdash; the source data holds no expiry field.
+        Treat it as indicative and compare it against the date printed on the card itself.
+      </p>
+
+      <p class="note idcard-footnote" th:if="${validity != null and validity.status == 'EXPIRED'}">
+        This card is <strong>past its calculated expiry</strong>. The identity still matched the
+        record; whether an expired card is acceptable is your own policy decision.
       </p>
 
       <p class="note">
-        These images stop loading about
+        The photograph and signature stop loading about
         <span th:text="${#numbers.formatInteger(expiresInSeconds / 60, 1)}">5</span>
         minute(s) after the check. Run the verification again if you need another look.
       </p>
