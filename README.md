@@ -1,8 +1,13 @@
-# Postal ID Verification Tool
+# PIVOT
+
+**PHLPost Identity Verification & Onboarding Toolkit**
 
 A web console and secured REST API for validating Postal Identification cards against the
 enrollment database, returning **VALID** or **INVALID** along with the cardholder photograph and
 signature captured at enrollment.
+
+The name is the brief: PHLPost is the authority, identity verification is the job, and the
+*toolkit* is the point — this is built to be integrated with, not only used directly.
 
 Java 17 · Spring Boot 3.5 · Thymeleaf · Spring Authorization Server · Flyway · H2 (PostgreSQL-ready)
 

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Postal ID Verification API</title>
+<title>PIVOT API</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@500;600&display=swap">
@@ -147,6 +147,14 @@ html { scroll-behavior: smooth; }
   margin: 0 0 10px;
   text-wrap: balance;
 }
+.masthead .app-full {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 12.5px;
+  letter-spacing: .04em;
+  color: var(--accent);
+  margin: -4px 0 14px;
+}
+
 .masthead .standfirst {
   font-size: 17px;
   color: var(--ink-mid);
@@ -463,6 +471,8 @@ footer.doc {
   .deflist > div { grid-template-columns: minmax(0, 1fr); gap: 2px; }
 }
 </style>
+
+<header class="masthead">
 <style>
   .shell { grid-template-columns: minmax(0, 1fr); gap: 0; }
   main { max-width: 78ch; margin: 0 auto; }
@@ -479,7 +489,8 @@ footer.doc {
 <header class="masthead">
   <div class="masthead-inner">
     <p class="eyebrow">Integration Guide</p>
-    <h1>Postal ID Verification API</h1>
+    <h1>PIVOT API</h1>
+    <p class="app-full">PHLPost Identity Verification &amp; Onboarding Toolkit</p>
     <p class="standfirst">
       How to call the verification service from your own system: obtaining a token, submitting a
       card for checking, reading the cardholder details and validity window it returns, and
@@ -936,7 +947,7 @@ RateLimit-Policy: 300;w=60</code></pre>
 </div>
 <footer class="doc">
   <p>
-    Sections 6 and 7 of the Postal ID Verification system documentation &middot; version 1.0.0-SNAPSHOT.
+    Sections 6 and 7 of the PIVOT system documentation &middot; version 1.0.0-SNAPSHOT.
     Section numbering follows the full document, so a reference to &ldquo;Section 6&rdquo; means the
     same thing in both.
   </p>

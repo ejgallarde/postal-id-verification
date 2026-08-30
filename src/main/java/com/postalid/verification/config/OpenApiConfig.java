@@ -50,9 +50,11 @@ public class OpenApiConfig {
 
         return new OpenAPI()
                 .info(new Info()
-                        .title("Postal ID Verification API")
+                        .title("PIVOT — PHLPost Identity Verification API")
                         .version("1.0.0")
                         .description("""
+                                PIVOT — the PHLPost Identity Verification & Onboarding Toolkit.
+
                                 Validates Postal Identification cards against the enrollment database.
 
                                 ## How a verification works
@@ -91,7 +93,7 @@ public class OpenApiConfig {
                                 Requests are budgeted per client and per source address. Exceeding a
                                 budget returns `429` with a `Retry-After` header.
                                 """)
-                        .contact(new Contact().name("Postal ID Verification Service"))
+                        .contact(new Contact().name("PIVOT — PHLPost Identity Verification & Onboarding Toolkit"))
                         .license(new License().name("Internal use")))
                 .servers(List.of(new Server()
                         .url(issuer == null || issuer.isBlank() ? "/" : issuer)

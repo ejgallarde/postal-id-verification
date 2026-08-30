@@ -1,6 +1,6 @@
 spring:
   application:
-    name: postal-id-verification
+    name: pivot
 
   datasource:
     # File-based H2. Portable ANSI SQL migrations mean switching to PostgreSQL is a datasource

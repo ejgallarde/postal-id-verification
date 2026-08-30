@@ -1,4 +1,6 @@
-# Postal ID Verification API
+# PIVOT API
+
+**PHLPost Identity Verification & Onboarding Toolkit**
 
 Version 1.0.0 · OpenAPI 3.1 · Base path `/api/v1`
 

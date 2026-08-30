@@ -199,10 +199,25 @@ input:focus {
 .brand-logo { display: block; height: 30px; width: auto; }
 
 .brand-text {
-    font-weight: 600;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
     padding-left: 12px;
     margin-left: 2px;
     border-left: 1px solid var(--line);
+    line-height: 1.25;
+}
+
+.brand-name { font-weight: 600; letter-spacing: .06em; }
+
+/* Supporting text: present for anyone who does not know the acronym, quiet enough that the
+   header still reads as one mark rather than two competing titles. */
+.brand-full { font-size: 11.5px; color: var(--ink-soft); }
+
+/* Below this the expansion would wrap into the sign-out control and crowd the logo, so the
+   acronym carries the header alone. The full name still appears on the sign-in page. */
+@media (max-width: 680px) {
+    .brand-full { display: none; }
 }
 
 /* --- ID comparison view ------------------------------------------------
@@ -422,4 +437,43 @@ input:focus {
     .idcard-grid, .idcard-grid:last-child { grid-template-columns: minmax(0, 1fr); }
     .idcard-qr { grid-row: auto; text-align: left; }
     .idcard-name { font-size: 19px; }
+}
+
+/* --- Sign-in page branding ---------------------------------------------
+   PHLPost leads and the toolkit name sits beneath it: the institution is the
+   authority, PIVOT is only the way staff reach it.
+   ---------------------------------------------------------------------- */
+
+.login-card { text-align: center; }
+.login-card .form, .login-card .alert { text-align: left; }
+
+.login-brand {
+    padding-bottom: 18px;
+    margin-bottom: 18px;
+    border-bottom: 1px solid var(--line);
+}
+
+.login-logo { display: block; width: 100%; max-width: 230px; height: auto; margin: 0 auto; }
+
+.login-wordmark {
+    display: inline-block;
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: .04em;
+    color: var(--accent);
+}
+
+.app-name {
+    font-size: 30px;
+    font-weight: 700;
+    letter-spacing: .14em;
+    color: var(--accent);
+    margin: 0 0 4px;
+}
+
+.app-expansion {
+    font-size: 12.5px;
+    color: var(--ink-soft);
+    letter-spacing: .01em;
+    margin: 0 0 20px;
 }

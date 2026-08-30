@@ -9,7 +9,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <!-- Result pages name a specific person; keep them out of history caches. -->
   <meta http-equiv="Cache-Control" content="no-store">
-  <title th:text="${title}">Postal ID Verification</title>
+  <title th:text="${title} + ' · PIVOT'">PIVOT</title>
   <link rel="stylesheet" th:href="@{/css/app.css}">
 </head>
 
@@ -23,8 +23,11 @@
     <a class="brand" th:href="@{/}">
       <img th:if="${brandLogoAvailable}" class="brand-logo"
            th:src="@{/img/phlpost-logo.png}" alt="PHLPost">
-      <span th:unless="${brandLogoAvailable}" class="brand-mark" aria-hidden="true">PID</span>
-      <span class="brand-text">Postal ID Verification</span>
+      <span th:unless="${brandLogoAvailable}" class="brand-mark" aria-hidden="true">PHLPOST</span>
+      <span class="brand-text">
+        <span class="brand-name">PIVOT</span>
+        <span class="brand-full">PHLPost Identity Verification &amp; Onboarding Toolkit</span>
+      </span>
     </a>
     <form th:action="@{/logout}" method="post" class="logout-form"
           th:if="${#authorization.expression('isAuthenticated()')}">

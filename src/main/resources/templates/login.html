@@ -4,8 +4,21 @@
 <body class="centered">
 
 <main class="wrap narrow">
-  <div class="card">
-    <h1>Postal ID Verification</h1>
+  <div class="card login-card">
+
+    <!--
+      PHLPost leads, PIVOT identifies the system beneath it. The institution is the authority
+      here; the toolkit is only how staff reach it.
+    -->
+    <div class="login-brand">
+      <img th:if="${brandLogoAvailable}" class="login-logo"
+           th:src="@{/img/phlpost-logo.png}" alt="PHLPost">
+      <span th:unless="${brandLogoAvailable}" class="login-wordmark">PHLPost</span>
+    </div>
+
+    <h1 class="app-name">PIVOT</h1>
+    <p class="app-expansion">PHLPost Identity Verification &amp; Onboarding Toolkit</p>
+
     <p class="lede">Sign in to run a verification.</p>
 
     <!-- Deliberately vague: naming which of the two was wrong helps an attacker enumerate users. -->
