@@ -1,5 +1,6 @@
 package com.postalid.verification.media;
 
+import com.postalid.verification.audit.VerificationContext;
 import com.postalid.verification.config.PostalIdProperties;
 import com.postalid.verification.domain.Cardholder;
 import com.postalid.verification.domain.CardholderDocument;
@@ -56,10 +57,11 @@ public class ImageTokenService {
     /**
      * Issues one reference per retrievable image the cardholder actually has.
      *
+     * @param holder the only caller who may redeem the references; see {@link #redeem}
      * @return document code to opaque reference; empty when nothing retrievable was captured
      */
     @Transactional
-    public Map<String, String> mintFor(Cardholder cardholder, String clientId) {
+    public Map<String, String> mintFor(Cardholder cardholder, String holder) {
         List<CardholderDocument> retrievable =
                 documentRepository.findByCardholderIdAndDocumentTypePubliclyRetrievableTrue(cardholder.getId());
 
@@ -73,7 +75,7 @@ public class ImageTokenService {
             token.setTokenHash(BlobStore.sha256(reference));
             token.setCardholderId(cardholder.getId());
             token.setDocCode(document.getDocumentType().getCode());
-            token.setClientId(clientId);
+            token.setClientId(holder);
             token.setIssuedAt(now);
             token.setExpiresAt(now.plus(config.getTokenTtl()));
             token.setUsesRemaining(config.getTokenMaxUses());
@@ -88,30 +90,30 @@ public class ImageTokenService {
     /**
      * Spends one use of a reference and returns the document it points at.
      *
-     * <p>Unknown, expired, exhausted and revoked references are all indistinguishable to the
-     * caller: every one of them comes back empty.
+     * <p>A reference is redeemable only by the holder it was minted for — the API client or the
+     * console operator whose verification produced it. Being 256 random bits it is hard to guess,
+     * but it travels in URLs, logs and browser history, and binding it means a leaked one is
+     * useless to anyone else holding the images scope.
+     *
+     * <p>Unknown, foreign, expired, exhausted and revoked references are all indistinguishable to
+     * the caller: every one of them comes back empty.
+     *
+     * @param holder as produced by {@link VerificationContext#imageHolder()}
      */
     @Transactional
-    public Optional<CardholderDocument> redeem(String reference) {
-        if (reference == null || reference.isBlank()) {
+    public Optional<CardholderDocument> redeem(String reference, String holder) {
+        if (reference == null || reference.isBlank() || holder == null) {
             return Optional.empty();
         }
 
-        Optional<ImageAccessToken> found = tokenRepository.findByTokenHash(BlobStore.sha256(reference));
-        if (found.isEmpty()) {
+        String tokenHash = BlobStore.sha256(reference);
+        if (tokenRepository.spendOneUse(tokenHash, holder, Instant.now()) == 0) {
             return Optional.empty();
         }
 
-        ImageAccessToken token = found.get();
-        if (!token.isUsable(Instant.now())) {
-            return Optional.empty();
-        }
-
-        token.consumeUse();
-        tokenRepository.save(token);
-
-        return documentRepository.findByCardholderIdAndDocumentTypeCode(
-                token.getCardholderId(), token.getDocCode());
+        return tokenRepository.findByTokenHash(tokenHash)
+                .flatMap(token -> documentRepository.findByCardholderIdAndDocumentTypeCode(
+                        token.getCardholderId(), token.getDocCode()));
     }
 
     private String newReference() {

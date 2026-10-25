@@ -79,6 +79,23 @@ class MatchRulesTest {
             assertThat(defaultRules().evaluate(query("MARIA", middle, "SANTOS", DOB), record())).isEmpty();
         }
 
+        @ParameterizedTest(name = "surname \"{0}\" matches stored \"{1}\"")
+        @DisplayName("surnames compare with spaces ignored")
+        @CsvSource({
+                "DELACRUZ,       DELA CRUZ",
+                "DELA CRUZ,      DELACRUZ",
+                "'DE LA CRUZ',   DELA CRUZ",
+                "LIBUIT ARROYO,  LIBUITARROYO",
+                "Libuit-Arroyo,  LIBUITARROYO",
+                "DELOS SANTOS,   DE LOS SANTOS"
+        })
+        void surnameIgnoresSpaces(String submitted, String storedNorm) {
+            Cardholder compound = record();
+            compound.setLastNameNorm(storedNorm);
+
+            assertThat(defaultRules().evaluate(query("MARIA", "REYES", submitted, DOB), compound)).isEmpty();
+        }
+
         @Test
         @DisplayName("no middle name submitted, none on record")
         void bothMiddleNamesAbsent() {
@@ -97,6 +114,26 @@ class MatchRulesTest {
         @Test
         void wrongSurname() {
             assertThat(defaultRules().evaluate(query("MARIA", "REYES", "SANTOZ", DOB), record())).containsExactly(FailureReason.SURNAME_MISMATCH);
+        }
+
+        @Test
+        @DisplayName("ignoring spaces does not loosen the letters: DELA CRUZ is not DELO CRUZ")
+        void spacesIgnoredButLettersStillCount() {
+            Cardholder compound = record();
+            compound.setLastNameNorm("DELA CRUZ");
+
+            assertThat(defaultRules().evaluate(query("MARIA", "REYES", "DELO CRUZ", DOB), compound))
+                    .containsExactly(FailureReason.SURNAME_MISMATCH);
+        }
+
+        @Test
+        @DisplayName("first names keep their spaces: EARLJOHN is not EARL JOHN")
+        void firstNameSpacesStillMatter() {
+            Cardholder twoFirstNames = record();
+            twoFirstNames.setFirstNameNorm("EARL JOHN");
+
+            assertThat(defaultRules().evaluate(query("EARLJOHN", "REYES", "SANTOS", DOB), twoFirstNames))
+                    .containsExactly(FailureReason.FIRST_NAME_MISMATCH);
         }
 
         @Test

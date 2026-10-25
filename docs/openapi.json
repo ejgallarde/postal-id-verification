@@ -39,8 +39,22 @@
           "Verification"
         ],
         "summary": "Verify a Postal ID",
-        "description": "Checks the submitted details against the enrollment record identified by the\npostal reference number, and answers VALID or INVALID.\n\nVALID requires all of: a record with that reference number exists, it is not\ndeleted, it has reached an issued status, and the surname, first name, middle\nname and date of birth all match.\n\nA VALID response carries the cardholder details as printed on the card, the\ncard's validity window, and short-lived relative URLs for the photograph and\nsignature. Fetching the images needs the postalid.images scope.\n\nExpiry is derived, not supplied by the source data: it is the card's production\ndate plus a configured validity period, and is flagged as derived. An expired\ncard still returns VALID with validity.status = EXPIRED, because the identity\ndid check out - read validity.status and apply your own policy.\n\nEvery unsuccessful case produces the same INVALID body. The endpoint will not\nreveal whether the reference number exists or which field failed, because that\nwould make it usable for harvesting other people's details. Clients granted the\npostalid.diagnostics scope additionally receive a reason object naming every\nmismatched field.\n",
+        "description": "Checks the submitted details against the enrollment record identified by the\npostal reference number, and answers VALID or INVALID.\n\nVALID requires all of: a record with that reference number exists, it is not\ndeleted, it has reached an issued status, and the surname, first name, middle\nname and date of birth all match.\n\nA VALID response carries the cardholder details as printed on the card, the\ncard's validity window, and short-lived relative URLs for the photograph and\nsignature. Fetching the images needs the postalid.images scope.\n\nTo get the images in the same response instead, add ?include=images. The\nphoto and signature then arrive base64-encoded under imageData, and no URLs are\nissued. This also needs the postalid.images scope, and each verification asking\nfor it draws two fetches from the client's image budget.\n\nExpiry is derived, not supplied by the source data: it is the card's production\ndate plus a configured validity period, and is flagged as derived. An expired\ncard still returns VALID with validity.status = EXPIRED, because the identity\ndid check out - read validity.status and apply your own policy.\n\nEvery unsuccessful case produces the same INVALID body. The endpoint will not\nreveal whether the reference number exists or which field failed, because that\nwould make it usable for harvesting other people's details. Clients granted the\npostalid.diagnostics scope additionally receive a reason object naming every\nmismatched field.\n",
         "operationId": "verify",
+        "parameters": [
+          {
+            "name": "include",
+            "in": "query",
+            "description": "Extra content to embed in a VALID response. The only value is `images`, which returns the photo and signature inline as base64 instead of as URLs to fetch. Requires the postalid.images scope.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "images"
+              ]
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -69,7 +83,7 @@
             "description": "Missing, expired or invalid access token."
           },
           "403": {
-            "description": "Token lacks the postalid.verify scope."
+            "description": "Token lacks the postalid.verify scope, or asked for include=images without postalid.images."
           },
           "429": {
             "description": "Rate limit exceeded; see the Retry-After header."
@@ -336,6 +350,29 @@
           }
         }
       },
+      "InlineImage": {
+        "type": "object",
+        "description": "An image embedded in the response as base64",
+        "properties": {
+          "contentType": {
+            "type": "string",
+            "description": "Media type of the decoded bytes. The photograph is image/jpeg; the signature is converted from TIFF to image/png.",
+            "example": "image/jpeg"
+          },
+          "data": {
+            "type": "string",
+            "format": "byte",
+            "description": "The image bytes, standard base64 with padding",
+            "example": "/9j/4AAQSkZJRgABAQAAAQABAAD..."
+          },
+          "byteLength": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Length of the decoded bytes",
+            "example": 18342
+          }
+        }
+      },
       "VerificationFailure": {
         "type": "object",
         "description": "Reason for an INVALID result. Requires the postalid.diagnostics scope.",
@@ -418,6 +455,13 @@
             "format": "int64",
             "description": "Present only on VALID. Seconds until the image URLs stop working.",
             "example": 300
+          },
+          "imageData": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/InlineImage"
+            },
+            "description": "Present only on VALID, and only when the request asked for include=images. The photo and signature embedded as base64, keyed like `images`. When present, `images` and `imagesExpireIn` are absent: nothing is left to fetch."
           },
           "reason": {
             "$ref": "#/components/schemas/VerificationFailure",

@@ -64,6 +64,22 @@ public class FieldNormalizer {
     }
 
     /**
+     * Equality on the comparison form with every space removed as well.
+     *
+     * <p>For surnames, where the same name is written with and without its spaces: DELA CRUZ and
+     * DELACRUZ, DE LOS SANTOS and DELOS SANTOS, and a hyphenated LIBUIT-ARROYO typed as
+     * LIBUIT ARROYO. Hyphens are already removed by {@link #normalize}, so without this a space
+     * typed where the hyphen belongs would never match.
+     */
+    public boolean matchesIgnoringSpaces(String a, String b) {
+        return constantTimeEquals(withoutSpaces(normalizeToEmpty(a)), withoutSpaces(normalizeToEmpty(b)));
+    }
+
+    private static String withoutSpaces(String normalized) {
+        return normalized.replace(" ", "");
+    }
+
+    /**
      * Compares two strings without returning early on the first differing character.
      *
      * <p>Length still leaks, which is unavoidable and uninteresting here; what matters is that

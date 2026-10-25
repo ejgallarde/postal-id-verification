@@ -151,6 +151,41 @@ class VerificationUiIntegrationTest {
     }
 
     @Test
+    @WithMockUser(username = "another-operator", roles = "OPERATOR")
+    @DisplayName("one operator cannot open the images another operator's verification produced")
+    void imageReferenceIsBoundToTheOperator() throws Exception {
+        MvcResult verification = mockMvc.perform(post("/verify").with(csrf())
+                        .with(org.springframework.security.test.web.servlet.request
+                                .SecurityMockMvcRequestPostProcessors.user("test-operator").roles("OPERATOR"))
+                        .param("postalRefNo", SyntheticPacket.POSTAL_REF_NO)
+                        .param("firstName", SyntheticPacket.FIRST_NAME)
+                        .param("middleName", SyntheticPacket.MIDDLE_NAME)
+                        .param("lastName", SyntheticPacket.LAST_NAME)
+                        .param("dateOfBirth", SyntheticPacket.DATE_OF_BIRTH))
+                .andReturn();
+
+        String photoRef = (String) verification.getModelAndView().getModel().get("photoRef");
+
+        // The class-level user here is another-operator.
+        mockMvc.perform(get("/ui/images/" + photoRef))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @WithMockUser(username = "test-operator", roles = "OPERATOR")
+    @DisplayName("the console applies the same character allow-list to names as the API")
+    void rejectsMarkupInNames() throws Exception {
+        mockMvc.perform(post("/verify").with(csrf())
+                        .param("postalRefNo", SyntheticPacket.POSTAL_REF_NO)
+                        .param("firstName", "<script>")
+                        .param("lastName", "SANTOS1")
+                        .param("dateOfBirth", SyntheticPacket.DATE_OF_BIRTH))
+                .andExpect(status().isOk())
+                .andExpect(view().name("verify"))
+                .andExpect(model().attributeHasFieldErrors("form", "firstName", "lastName"));
+    }
+
+    @Test
     @DisplayName("the console image route is not open to anonymous callers")
     void imageRouteRequiresSignIn() throws Exception {
         mockMvc.perform(get("/ui/images/anything"))

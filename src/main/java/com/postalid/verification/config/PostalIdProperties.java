@@ -4,6 +4,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 
 import java.time.Duration;
 import java.time.Period;
+import java.time.ZoneId;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -20,6 +21,7 @@ public class PostalIdProperties {
     private final RateLimit rateLimit = new RateLimit();
     private final Audit audit = new Audit();
     private final Oauth oauth = new Oauth();
+    private final Sandbox sandbox = new Sandbox();
 
     public Verify getVerify() { return verify; }
     public Media getMedia() { return media; }
@@ -28,6 +30,7 @@ public class PostalIdProperties {
     public RateLimit getRateLimit() { return rateLimit; }
     public Audit getAudit() { return audit; }
     public Oauth getOauth() { return oauth; }
+    public Sandbox getSandbox() { return sandbox; }
 
     public static class Verify {
         /**
@@ -54,6 +57,13 @@ public class PostalIdProperties {
         /** Report an expired card as INVALID rather than VALID with an EXPIRED validity block. */
         private boolean treatExpiredAsInvalid = false;
 
+        /**
+         * The zone whose calendar decides whether a card has expired. Card dates are Philippine
+         * calendar dates, so "today" must be too; the server's own zone (typically UTC) would
+         * flip a card to EXPIRED eight hours late.
+         */
+        private ZoneId timeZone = ZoneId.of("Asia/Manila");
+
         public Set<String> getIssuedStatuses() { return issuedStatuses; }
         public void setIssuedStatuses(Set<String> issuedStatuses) { this.issuedStatuses = issuedStatuses; }
 
@@ -68,6 +78,9 @@ public class PostalIdProperties {
 
         public boolean isTreatExpiredAsInvalid() { return treatExpiredAsInvalid; }
         public void setTreatExpiredAsInvalid(boolean v) { this.treatExpiredAsInvalid = v; }
+
+        public ZoneId getTimeZone() { return timeZone; }
+        public void setTimeZone(ZoneId timeZone) { this.timeZone = timeZone; }
     }
 
     public static class Media {
@@ -138,9 +151,51 @@ public class PostalIdProperties {
         private int imagePerClientPerMinute = 600;
 
         /**
-         * Consecutive INVALID results from one client within the lookback window before the
-         * client is throttled harder. Blunts patient enumeration that stays under the plain
-         * per-minute ceiling.
+         * Image fetches per source IP per minute. A separate budget from verification: one VALID
+         * result legitimately leads to two image fetches, and those must not eat into the
+         * address's verification allowance.
+         */
+        private int imagePerIpPerMinute = 300;
+
+        /**
+         * Verifications per console operator per minute. A person reading cards at a counter
+         * manages a few a minute; anything near this ceiling is a script behind a session.
+         */
+        private int verifyPerOperatorPerMinute = 30;
+
+        /**
+         * Requests to {@code /oauth2/token} per source IP per minute. Access tokens live five
+         * minutes, so a well-behaved client needs about one request per instance every few
+         * minutes; 20 leaves room for a fleet behind one NAT address while capping what one
+         * address can make the server spend on BCrypt secret checks.
+         */
+        private int tokenPerIpPerMinute = 20;
+
+        /**
+         * Failed client authentications per client id per hour before that id is refused for a
+         * while. The ceiling OWASP ASVS (V2.2.1) sets for a single credential is 100 per hour.
+         * Counting per id stops a distributed guesser from spreading attempts across addresses.
+         */
+        private int tokenFailuresPerClientPerHour = 100;
+
+        /**
+         * Console sign-in attempts per source IP per minute. A person mistyping a password tries
+         * a few times; ten a minute is far beyond that and far below what a guessing script wants.
+         */
+        private int loginPerIpPerMinute = 10;
+
+        /**
+         * Failed sign-ins per operator username per hour, across all addresses, before that
+         * account is refused for a while. Stricter than the ASVS ceiling of 100 because operator
+         * passwords are chosen by people, where client secrets are generated.
+         */
+        private int loginFailuresPerUserPerHour = 20;
+
+        /**
+         * Net INVALID results from one caller within the lookback window before the caller is
+         * throttled harder. Blunts patient enumeration that stays under the plain per-minute
+         * ceiling. A VALID result earns back one failure, but only once per distinct card in the
+         * window, so replaying one known-good card cannot launder a stream of guesses.
          */
         private int invalidBurstThreshold = 20;
         private Duration invalidLookback = Duration.ofMinutes(10);
@@ -158,6 +213,24 @@ public class PostalIdProperties {
         public int getImagePerClientPerMinute() { return imagePerClientPerMinute; }
         public void setImagePerClientPerMinute(int v) { this.imagePerClientPerMinute = v; }
 
+        public int getImagePerIpPerMinute() { return imagePerIpPerMinute; }
+        public void setImagePerIpPerMinute(int v) { this.imagePerIpPerMinute = v; }
+
+        public int getVerifyPerOperatorPerMinute() { return verifyPerOperatorPerMinute; }
+        public void setVerifyPerOperatorPerMinute(int v) { this.verifyPerOperatorPerMinute = v; }
+
+        public int getTokenPerIpPerMinute() { return tokenPerIpPerMinute; }
+        public void setTokenPerIpPerMinute(int v) { this.tokenPerIpPerMinute = v; }
+
+        public int getTokenFailuresPerClientPerHour() { return tokenFailuresPerClientPerHour; }
+        public void setTokenFailuresPerClientPerHour(int v) { this.tokenFailuresPerClientPerHour = v; }
+
+        public int getLoginPerIpPerMinute() { return loginPerIpPerMinute; }
+        public void setLoginPerIpPerMinute(int v) { this.loginPerIpPerMinute = v; }
+
+        public int getLoginFailuresPerUserPerHour() { return loginFailuresPerUserPerHour; }
+        public void setLoginFailuresPerUserPerHour(int v) { this.loginFailuresPerUserPerHour = v; }
+
         public int getInvalidBurstThreshold() { return invalidBurstThreshold; }
         public void setInvalidBurstThreshold(int v) { this.invalidBurstThreshold = v; }
 
@@ -166,6 +239,21 @@ public class PostalIdProperties {
 
         public Duration getInvalidPenalty() { return invalidPenalty; }
         public void setInvalidPenalty(Duration v) { this.invalidPenalty = v; }
+    }
+
+    /**
+     * The external-testing sandbox. Only read when the {@code sandbox} profile is active.
+     */
+    public static class Sandbox {
+        /**
+         * Where the synthetic enrollment packets are written before being ingested. Kept on disk,
+         * rather than in a temporary directory, so the exact files a tester's result came from
+         * can be inspected afterwards.
+         */
+        private String packetDir = "./data/sandbox/packets";
+
+        public String getPacketDir() { return packetDir; }
+        public void setPacketDir(String packetDir) { this.packetDir = packetDir; }
     }
 
     public static class Audit {

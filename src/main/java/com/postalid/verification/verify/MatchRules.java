@@ -36,7 +36,10 @@ public class MatchRules {
      * @return every field that failed to match, in a stable order; empty when the details match.
      */
     public List<FailureReason> evaluate(VerificationQuery query, Cardholder record) {
-        boolean surnameOk = normalizer.matches(query.lastName(), record.getLastNameNorm());
+        // Surnames compare with spaces ignored: compound surnames are written both ways (DELA CRUZ,
+        // DELACRUZ), and a hyphen is often typed as a space. First names keep their spaces, since
+        // there they separate two names (EARL JOHN) rather than vary in spelling.
+        boolean surnameOk = normalizer.matchesIgnoringSpaces(query.lastName(), record.getLastNameNorm());
         boolean firstNameOk = normalizer.matches(query.firstName(), record.getFirstNameNorm());
         boolean middleNameOk = middleNameMatches(query.middleName(), record.getMiddleNameNorm());
         boolean dobOk = Objects.equals(query.dateOfBirth(), record.getDateOfBirth());

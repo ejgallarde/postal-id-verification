@@ -85,6 +85,18 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         return ResponseEntity.badRequest().body(problem);
     }
 
+    /** Same shape as a body validation failure, so a client handles both with one code path. */
+    @ExceptionHandler(UnsupportedIncludeException.class)
+    public ResponseEntity<ProblemDetail> handleUnsupportedInclude(UnsupportedIncludeException e) {
+        ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
+        problem.setType(URI.create(PROBLEM_BASE + "validation-failed"));
+        problem.setTitle("Validation Failed");
+        problem.setDetail("One or more fields are missing or malformed.");
+        problem.setProperty("errors", Map.of("include", "Supported values: " + e.getSupported()));
+
+        return ResponseEntity.badRequest().body(problem);
+    }
+
     @ExceptionHandler(RateLimitExceededException.class)
     public ResponseEntity<ProblemDetail> handleRateLimit(RateLimitExceededException e) {
         ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.TOO_MANY_REQUESTS);

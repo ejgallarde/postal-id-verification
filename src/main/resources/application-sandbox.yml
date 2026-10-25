@@ -1,0 +1,104 @@
+# External-testing sandbox.
+#
+# Serves only the synthetic cardholders in classpath:sandbox/cardholders.csv, loaded at startup by
+# SandboxSeeder. It refuses to start if its database holds anything else, and it cannot run
+# alongside the ingest profile. Run it on its own:
+#
+#   java -jar pivot.jar --spring.profiles.active=sandbox
+#
+# Meant to sit behind a tunnel or reverse proxy (Cloudflare Tunnel, for instance) that terminates
+# TLS and forwards to this process on loopback. See docs/SANDBOX.md for the full setup.
+#
+# Secrets have no defaults on purpose: startup fails until each is supplied from the environment.
+
+spring:
+  datasource:
+    # Its own database, never shared with a dev or production instance.
+    url: jdbc:h2:file:./data/sandbox/postalid;AUTO_SERVER=TRUE
+
+server:
+  # Loopback only. The tunnel is the sole way in, so it is the only caller that can set the
+  # forwarded headers trusted below.
+  address: ${POSTALID_BIND_ADDRESS:127.0.0.1}
+  port: ${SERVER_PORT:8080}
+  ssl:
+    # TLS ends at the tunnel; the hop from it to this process never leaves the machine.
+    enabled: ${POSTALID_SSL_ENABLED:false}
+  # Behind a proxy every request arrives from 127.0.0.1. Without trusting the proxy's
+  # X-Forwarded-For, all testers would share one per-address rate-limit bucket.
+  forward-headers-strategy: native
+  tomcat:
+    remoteip:
+      internal-proxies: 127\.0\.0\.1|0:0:0:0:0:0:0:1
+      remote-ip-header: x-forwarded-for
+      protocol-header: x-forwarded-proto
+  servlet:
+    session:
+      cookie:
+        # Distinct from the dev instance's, so the two can run side by side on one machine
+        # without overwriting each other's sessions (browsers do not separate cookies by port).
+        name: PIVOT_SANDBOX_SESSION
+        # The console is reached through the tunnel over HTTPS, so the session cookie is
+        # secure-only. Set POSTALID_SECURE_COOKIE=false only for a sandbox used locally over plain
+        # HTTP and never exposed: a secure-only cookie is never sent back over http://.
+        secure: ${POSTALID_SECURE_COOKIE:true}
+
+logging:
+  level:
+    com.postalid.verification: INFO
+
+postalid:
+  storage:
+    root: ${POSTALID_STORAGE_ROOT:./data/sandbox/blobstore}
+
+  sandbox:
+    packet-dir: ./data/sandbox/packets
+
+  audit:
+    prn-hash-pepper: ${POSTALID_AUDIT_PRN_HASH_PEPPER}
+
+  oauth:
+    # The public URL testers reach, e.g. https://pivot-sandbox.example.ph. It is stamped into
+    # every token as the issuer, so set it to what clients actually call.
+    issuer: ${POSTALID_ISSUER:http://localhost:8080}
+    clients:
+      # One entry per tester organisation, each with its own secret, so one can be revoked
+      # without touching the others. Generate secrets with: openssl rand -base64 32
+      sandbox-tester:
+        name: Sandbox tester
+        secret: ${SANDBOX_TESTER_SECRET}
+        scopes:
+          - postalid.verify
+          - postalid.images
+          # Field-level failure reasons are harmless when every record is synthetic, and they
+          # are what a tester needs to understand a surprising INVALID.
+          - postalid.diagnostics
+
+  web:
+    # Swagger UI is the testers' reference; nothing in it is sensitive here.
+    public-api-docs: true
+    operators:
+      sandbox-admin:
+        password: ${SANDBOX_ADMIN_PASSWORD}
+      # The account handed to external testers for the console. Separate from the admin so it can
+      # be rotated, or dropped, without touching the account used to run the sandbox. Every
+      # verification is audited against the operator name.
+      tester:
+        password: ${SANDBOX_TESTER_CONSOLE_PASSWORD}
+
+  rate-limit:
+    enabled: true
+    # Tighter than production defaults: a tester needs tens of calls a minute, not hundreds.
+    verify-per-client-per-minute: 60
+    verify-per-ip-per-minute: 60
+    image-per-client-per-minute: 120
+    image-per-ip-per-minute: 120
+    verify-per-operator-per-minute: 30
+    token-per-ip-per-minute: 20
+    token-failures-per-client-per-hour: 100
+    # The console sign-in is public through the tunnel, so it gets the same two budgets.
+    login-per-ip-per-minute: 10
+    login-failures-per-user-per-hour: 20
+    invalid-burst-threshold: 20
+    invalid-lookback: 10m
+    invalid-penalty: 5m

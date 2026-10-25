@@ -24,9 +24,14 @@ import java.util.Optional;
  *       reference number is unknown, the card was never issued, or three of five fields were
  *       wrong, they see an unadorned INVALID. The detail goes to the audit trail, and to
  *       diagnostics-scoped clients only.</li>
- *   <li>An unknown reference number is still compared against a decoy record. Without that, the
- *       not-found path would return measurably faster than the mismatch path, and the timing
- *       difference alone would confirm which reference numbers exist.</li>
+ *   <li>An unknown reference number is still compared against a decoy record, so the in-memory
+ *       comparison work is the same on every refusal. This is hygiene rather than a guarantee:
+ *       the comparison costs microseconds, while the indexed lookup that precedes it, and the
+ *       row it may or may not load, cost milliseconds and vary with the database. Over a network
+ *       that difference is buried in jitter, but a caller averaging many samples from close by
+ *       could still separate the two populations. The rate limits and the enumeration throttle
+ *       are what make that sampling expensive; if a stronger guarantee is ever needed, pad every
+ *       INVALID response to a fixed minimum latency.</li>
  * </ol>
  */
 @Service

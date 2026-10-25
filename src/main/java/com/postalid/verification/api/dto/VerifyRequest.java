@@ -57,8 +57,8 @@ public record VerifyRequest(
      * Letters from any script, plus the spaces, hyphens, apostrophes and full stops that appear
      * legitimately in names. Anything else — digits, angle brackets, control characters — is out.
      */
-    static final String NAME_PATTERN = "^[\\p{L}\\p{M}][\\p{L}\\p{M} .'\\-]*$";
+    public static final String NAME_PATTERN = "^[\\p{L}\\p{M}][\\p{L}\\p{M} .'\\-]*$";
 
     /** As above, but an empty value is allowed, since a middle name is optional. */
-    static final String OPTIONAL_NAME_PATTERN = "^$|" + NAME_PATTERN;
+    public static final String OPTIONAL_NAME_PATTERN = "^$|" + NAME_PATTERN;
 }

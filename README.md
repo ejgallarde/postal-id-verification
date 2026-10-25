@@ -9,7 +9,7 @@ signature captured at enrollment.
 The name is the brief: PHLPost is the authority, identity verification is the job, and the
 *toolkit* is the point — this is built to be integrated with, not only used directly.
 
-Java 17 · Spring Boot 3.5 · Thymeleaf · Spring Authorization Server · Flyway · H2 (PostgreSQL-ready)
+Java 25 · Spring Boot 3.5 · Thymeleaf · Spring Authorization Server · Flyway · H2 (PostgreSQL-ready)
 
 ---
 
@@ -33,7 +33,7 @@ number, all belonging to one identifiable person.
 
 ## Quick start
 
-Requires JDK 17+ and Maven 3.9+. No database or container runtime needed — H2 runs in-process.
+Requires JDK 25+ and Maven 3.9+. No database or container runtime needed — H2 runs in-process.
 
 ```bash
 # Load the enrollment packets in ./files, then start serving.
@@ -68,6 +68,14 @@ curl -s -X POST http://localhost:8080/api/v1/verify \
 
 Full contract: **[docs/API.md](docs/API.md)**.
 
+### External-testing sandbox
+
+`--spring.profiles.active=sandbox` runs an instance holding only synthetic cardholders, for third
+parties to integrate against. It refuses to start if its database holds any real record. Setup,
+exposure through a tunnel, and the tester-facing card catalogue are in
+**[docs/SANDBOX.md](docs/SANDBOX.md)**. On Windows, `scripts\sandbox.ps1` starts it and publishes it through a
+Cloudflare tunnel in one step.
+
 ---
 
 ## How verification works
@@ -81,7 +89,9 @@ Names are compared on a normalized form — trimmed, uppercased, accents decompo
 [`FieldNormalizer`](src/main/java/com/postalid/verification/verify/FieldNormalizer.java). The
 ingester writes the same normalized form into the `*_norm` columns, so stored and submitted values
 can never be normalized differently. A middle **initial** is accepted where the record holds a
-full middle name, because many cards print only the initial.
+full middle name, because many cards print only the initial. Surnames are compared with spaces
+ignored as well, so compound surnames match however they are spaced (`DELA CRUZ` = `DELACRUZ`) and a
+space typed for a hyphen still matches.
 
 ### The operator console shows a card-shaped comparison view
 
@@ -102,9 +112,12 @@ screenshot yields a reference rather than somebody's identity.
 
 #### PHLPost branding
 
-The console uses the PHLPost logo as its primary mark. The file is not in this repository — drop
-it at `src/main/resources/static/img/phlpost-logo.png` and rebuild. Until then the header falls
-back to a text wordmark rather than a broken image; the choice is logged at startup.
+The console carries the Bagong Pilipinas mark followed by the PHLPost logo, under a slim
+"Republic of the Philippines · Philippine Postal Corporation" band, as government sites do. The
+files live at `src/main/resources/static/img/bagong-pilipinas-mark.png` (a 128px-high web
+derivative; the full-resolution original is too heavy for a header) and
+`src/main/resources/static/img/phlpost-logo.png`. Either may be absent: the header falls back to
+a text wordmark rather than a broken image, and the choice is logged at startup.
 
 ### What a VALID response carries
 
@@ -140,8 +153,18 @@ Clients granted the `postalid.diagnostics` scope additionally receive a `reason`
 field-level detail is what would otherwise let any credential holder confirm guesses about a
 stranger one field at a time. Without that scope the endpoint reveals nothing — not even whether
 a reference number exists, which would otherwise make it a directory of who holds a Postal ID.
-For the same reason the not-found path still runs a comparison against a decoy record, so it
-cannot be identified by being measurably faster.
+For the same reason the not-found path still runs a comparison against a decoy record, so the
+in-memory work is the same on every refusal. That is hygiene rather than a timing guarantee — the
+database lookup dominates response time — so the rate limits and the enumeration throttle are
+what actually make probing expensive.
+
+A caller that keeps failing is throttled. The count is **net**: each INVALID adds one, and a VALID
+earns one back, but only the first VALID for a given card in the lookback window. Replaying a card
+the caller already knows is genuine cannot launder a run of guesses. The console applies the same
+throttle per operator, plus its own per-operator budget.
+
+Image references are bound to whoever received them — the API client, or the console operator —
+so a reference that leaks through a log or browser history is useless to anyone else.
 
 ---
 
@@ -248,6 +271,27 @@ Ingest is idempotent — re-running updates in place. A packet that fails is log
 one bad record cannot block a batch; set `postalid.ingest.fail-fast=true` to abort on the first
 failure instead.
 
+### Viewing a real packet locally
+
+To check a real drop in the console with its real photograph and signature, ingest it into a
+**private local instance**, never the sandbox. Put the packet folder under `files/` (git-ignored
+for exactly this reason; never under `src/`, which is committed and packed into the jar) and run:
+
+```bash
+java -Duser.timezone=UTC -jar target/postal-id-verification-1.0.0-SNAPSHOT.jar \
+  --spring.profiles.active=dev,ingest \
+  --server.address=127.0.0.1 --server.port=8081 --postalid.oauth.issuer=http://127.0.0.1:8081
+```
+
+Then sign in at <http://127.0.0.1:8081> as `operator` / `dev-only-password` and verify the card.
+`--server.address=127.0.0.1` matters: the dev profile's credentials are public placeholders, so
+the instance holding real data must not be reachable from the rest of the network. Its database
+is `./data/postalid` and its blob store `./data/blobstore`, both git-ignored.
+
+Real data and the sandbox stay apart by design. The sandbox refuses to start if its database holds
+any record its catalogue of fictional test cards does not list, and it cannot run with the
+`ingest` profile.
+
 ### What gets copied, and what does not
 
 Only the two files the API can serve are copied into the blob store. Everything else is recorded
@@ -284,6 +328,7 @@ All settings live under `postalid.*`. The ones that matter most:
 | `postalid.verify.allow-middle-name-omission` | `false` | Accept an omitted middle name |
 | `postalid.verify.validity-period` | `P3Y` | Derived card validity, counted from the production date |
 | `postalid.verify.treat-expired-as-invalid` | `false` | Report an expired card as INVALID rather than VALID + EXPIRED |
+| `postalid.verify.time-zone` | `Asia/Manila` | Calendar used to decide whether a card has expired |
 | `postalid.media.token-ttl` | `5m` | Image reference lifetime |
 | `postalid.media.token-max-uses` | `5` | Fetches allowed per reference |
 | `postalid.storage.root` | `./data/blobstore` | Where servable image bytes live |
@@ -291,15 +336,21 @@ All settings live under `postalid.*`. The ones that matter most:
 | `postalid.ingest.max-depth` | `5` | How deep below the source root to search |
 | `postalid.ingest.fail-fast` | `false` | Abort the batch on the first bad packet |
 | `postalid.rate-limit.*` | see below | Per-client and per-address budgets |
-| `postalid.rate-limit.invalid-burst-threshold` | `20` | Consecutive INVALIDs before a caller is throttled |
+| `postalid.rate-limit.invalid-burst-threshold` | `20` | Net INVALIDs (a VALID on a new card earns one back) before a caller is throttled |
 | `postalid.rate-limit.invalid-penalty` | `5m` | How long that throttle lasts |
+| `postalid.rate-limit.token-per-ip-per-minute` | `20` | Requests to `/oauth2/token` (and introspect/revoke) per source address |
+| `postalid.rate-limit.token-failures-per-client-per-hour` | `100` | Failed client authentications per client id before it is refused for a while (OWASP ASVS V2.2.1) |
+| `postalid.rate-limit.login-per-ip-per-minute` | `10` | Console sign-in attempts per source address |
+| `postalid.rate-limit.login-failures-per-user-per-hour` | `20` | Failed console sign-ins per username before the account is refused for a while |
 | `postalid.limits.max-request-bytes` | `16384` | Request bodies larger than this are refused with 413 |
 | `postalid.oauth.issuer` | *(none)* | Public base URL; pins the `iss` claim |
 | `postalid.oauth.jwk.keystore-location` | *(none)* | RSA signing key; ephemeral if unset |
 | `postalid.web.public-api-docs` | `false` | Whether Swagger UI is readable without signing in |
 
-Rate limits default to 300 verifications per client per minute, 100 per source address, and 600
-image fetches per client. They are held in-process: behind more than one instance the effective
+Rate limits default to 300 verifications per client per minute, 100 per source address, and 30
+per console operator; image fetches have their own budgets of 600 per client and 300 per source
+address, so fetching the photo and signature after a VALID result never eats into the
+verification allowance. They are held in-process: behind more than one instance the effective
 limit multiplies by the instance count, so divide the configured numbers accordingly until a
 shared backend is introduced.
 

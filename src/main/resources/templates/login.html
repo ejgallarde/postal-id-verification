@@ -11,6 +11,8 @@
       here; the toolkit is only how staff reach it.
     -->
     <div class="login-brand">
+      <img th:if="${govMarkAvailable}" class="login-gov"
+           th:src="@{/img/bagong-pilipinas-mark.png}" alt="Bagong Pilipinas">
       <img th:if="${brandLogoAvailable}" class="login-logo"
            th:src="@{/img/phlpost-logo.png}" alt="PHLPost">
       <span th:unless="${brandLogoAvailable}" class="login-wordmark">PHLPost</span>
@@ -24,6 +26,9 @@
     <!-- Deliberately vague: naming which of the two was wrong helps an attacker enumerate users. -->
     <div class="alert alert-error" th:if="${param.error}" role="alert">
       Incorrect username or password.
+    </div>
+    <div class="alert alert-warn" th:if="${param.throttled}" role="alert">
+      Too many sign-in attempts. Wait a few minutes before trying again.
     </div>
     <div class="alert alert-info" th:if="${param.loggedOut}" role="status">
       You have been signed out.

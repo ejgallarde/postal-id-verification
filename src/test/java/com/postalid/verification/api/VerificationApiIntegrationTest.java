@@ -169,6 +169,65 @@ class VerificationApiIntegrationTest {
     }
 
     @Test
+    @DisplayName("include=images embeds the photo and signature and issues no URLs")
+    void includeImagesEmbedsThem() throws Exception {
+        MvcResult result = mockMvc.perform(post(VERIFY_URL + "?include=images")
+                        .with(withScopes("postalid.verify", "postalid.images"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validBody()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result").value("VALID"))
+                .andExpect(jsonPath("$.imageData.photo.contentType").value("image/jpeg"))
+                .andExpect(jsonPath("$.imageData.signature.contentType").value("image/png"))
+                // Nothing left to fetch, so no URLs and no expiry for them.
+                .andExpect(jsonPath("$.images").doesNotExist())
+                .andExpect(jsonPath("$.imagesExpireIn").doesNotExist())
+                .andReturn();
+
+        JsonNode photo = new ObjectMapper().readTree(result.getResponse().getContentAsString())
+                .get("imageData").get("photo");
+        byte[] bytes = java.util.Base64.getDecoder().decode(photo.get("data").asText());
+        assertThat(bytes.length).isEqualTo(photo.get("byteLength").asInt());
+        // JPEG start-of-image marker: the bytes really are the photograph, not a placeholder.
+        assertThat(bytes[0]).isEqualTo((byte) 0xFF);
+        assertThat(bytes[1]).isEqualTo((byte) 0xD8);
+    }
+
+    @Test
+    @DisplayName("include=images without the images scope is refused before anything is verified")
+    void includeImagesRequiresTheImagesScope() throws Exception {
+        mockMvc.perform(post(VERIFY_URL + "?include=images")
+                        .with(withScopes("postalid.verify"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validBody()))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("an unknown include value is a 400 naming the parameter, not silently ignored")
+    void unknownIncludeValueIsRejected() throws Exception {
+        mockMvc.perform(post(VERIFY_URL + "?include=image")
+                        .with(withScopes("postalid.verify", "postalid.images"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validBody()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors.include").value("Supported values: images"));
+    }
+
+    @Test
+    @DisplayName("include=images on an INVALID result embeds nothing")
+    void includeImagesOnInvalidEmbedsNothing() throws Exception {
+        mockMvc.perform(post(VERIFY_URL + "?include=images")
+                        .with(withScopes("postalid.verify", "postalid.images"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody("WRONG", SyntheticPacket.MIDDLE_NAME, SyntheticPacket.LAST_NAME,
+                                SyntheticPacket.DATE_OF_BIRTH, SyntheticPacket.POSTAL_REF_NO)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result").value("INVALID"))
+                .andExpect(jsonPath("$.imageData").doesNotExist());
+    }
+
+    @Test
     @DisplayName("a middle initial is accepted in place of the full middle name")
     void acceptsMiddleInitial() throws Exception {
         mockMvc.perform(post(VERIFY_URL)
@@ -346,6 +405,25 @@ class VerificationApiIntegrationTest {
 
         mockMvc.perform(get(url).with(withScopes("postalid.images")))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("an image reference works only for the client whose verification minted it")
+    void imageReferenceIsBoundToTheMintingClient() throws Exception {
+        String photoRef = photoReferenceFromValidVerification();
+
+        // Another client, holding the images scope legitimately, gets the same 404 as for a
+        // reference that never existed.
+        mockMvc.perform(get("/api/v1/images/" + photoRef)
+                        .with(jwt().jwt(builder -> builder.claim("azp", "some-other-client"))
+                                .authorities(new SimpleGrantedAuthority("SCOPE_postalid.images"))))
+                .andExpect(status().isNotFound());
+
+        // And the attempt did not spend one of the owner's uses: all five are still there.
+        for (int i = 0; i < 5; i++) {
+            mockMvc.perform(get("/api/v1/images/" + photoRef).with(withScopes("postalid.images")))
+                    .andExpect(status().isOk());
+        }
     }
 
     @Test

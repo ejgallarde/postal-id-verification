@@ -2,6 +2,7 @@ package com.postalid.verification.config;
 
 import com.postalid.verification.web.RateLimitFilter;
 import jakarta.servlet.DispatcherType;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
@@ -75,7 +76,9 @@ public class SecurityConfig {
     @Order(3)
     public SecurityFilterChain webFilterChain(HttpSecurity http,
                                               RateLimitFilter rateLimitFilter,
-                                              WebUiProperties webUiProperties) throws Exception {
+                                              WebUiProperties webUiProperties,
+                                              @Value("${server.servlet.session.cookie.name:JSESSIONID}")
+                                              String sessionCookieName) throws Exception {
         http
                 .authorizeHttpRequests(auth -> {
                     // Container-generated error forwards. Without this an anonymous 404 is
@@ -102,7 +105,9 @@ public class SecurityConfig {
                 .logout(logout -> logout
                         .logoutSuccessUrl("/login?loggedOut")
                         .invalidateHttpSession(true)
-                        .deleteCookies("JSESSIONID"))
+                        // Whatever this profile names its session cookie; dev and sandbox use their
+                        // own names so they can share a host without clobbering each other.
+                        .deleteCookies(sessionCookieName))
                 .sessionManagement(session -> session
                         .sessionFixation(sessionFixation -> sessionFixation.newSession())
                         // Concurrent-session control depends on the container telling Spring

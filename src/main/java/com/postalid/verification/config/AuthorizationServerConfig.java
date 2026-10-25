@@ -2,6 +2,7 @@ package com.postalid.verification.config;
 
 import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
+import com.postalid.verification.web.TokenEndpointRateLimitFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
@@ -29,6 +30,7 @@ import org.springframework.security.oauth2.server.authorization.token.JwtEncodin
 import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenCustomizer;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
+import org.springframework.security.web.authentication.preauth.AbstractPreAuthenticatedProcessingFilter;
 import org.springframework.http.HttpStatus;
 
 import java.util.ArrayList;
@@ -51,12 +53,18 @@ public class AuthorizationServerConfig {
      */
     @Bean
     @Order(Ordered.HIGHEST_PRECEDENCE)
-    public SecurityFilterChain authorizationServerFilterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain authorizationServerFilterChain(HttpSecurity http,
+                                                              TokenEndpointRateLimitFilter tokenRateLimitFilter)
+            throws Exception {
         OAuth2AuthorizationServerConfigurer configurer = OAuth2AuthorizationServerConfigurer.authorizationServer();
 
         http
                 .securityMatcher(configurer.getEndpointsMatcher())
                 .with(configurer, Customizer.withDefaults())
+                // Ahead of the configurer's client authentication filter, which the configurer
+                // places after AbstractPreAuthenticatedProcessingFilter: a refused request must
+                // never reach the BCrypt comparison it exists to protect.
+                .addFilterBefore(tokenRateLimitFilter, AbstractPreAuthenticatedProcessingFilter.class)
                 .authorizeHttpRequests(auth -> auth.anyRequest().authenticated())
                 // Protocol endpoints authenticate the client on every request; there is no
                 // session or cookie for a CSRF token to protect.

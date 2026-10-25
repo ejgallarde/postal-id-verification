@@ -18,4 +18,18 @@ public record VerificationContext(
         /** An operator using the web form. */
         WEB
     }
+
+    /** Who may redeem the image references this verification mints. */
+    public String imageHolder() {
+        return imageHolder(channel, clientId);
+    }
+
+    /**
+     * Qualified by channel because OAuth client ids and operator usernames are configured
+     * separately and could coincide; an operator named after an API client must not be able to
+     * redeem that client's references, or the reverse.
+     */
+    public static String imageHolder(Channel channel, String id) {
+        return id == null ? null : channel.name() + ":" + id;
+    }
 }

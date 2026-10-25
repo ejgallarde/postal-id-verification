@@ -49,6 +49,11 @@ public record VerifyResponse(
                 example = "300")
         Long imagesExpireIn,
 
+        @Schema(description = "Present only on VALID, and only when the request asked for "
+                + "include=images. The photo and signature embedded as base64, keyed like `images`. "
+                + "When present, `images` and `imagesExpireIn` are absent: nothing is left to fetch.")
+        Map<String, InlineImage> imageData,
+
         @Schema(description = "Present only on INVALID, and only for clients holding the "
                 + "postalid.diagnostics scope.")
         VerificationFailure reason) {
@@ -59,16 +64,25 @@ public record VerifyResponse(
                                        Map<String, String> images,
                                        long imagesExpireInSeconds) {
         return new VerifyResponse("VALID", Instant.now(), requestId,
-                cardholder, validity, images, imagesExpireInSeconds, null);
+                cardholder, validity, images, imagesExpireInSeconds, null, null);
+    }
+
+    /** VALID with the images embedded, for a caller that asked for {@code include=images}. */
+    public static VerifyResponse validWithImageData(String requestId,
+                                                    CardholderDetails cardholder,
+                                                    CardValidity validity,
+                                                    Map<String, InlineImage> imageData) {
+        return new VerifyResponse("VALID", Instant.now(), requestId,
+                cardholder, validity, null, null, imageData, null);
     }
 
     /** The default INVALID: nothing beyond the verdict. */
     public static VerifyResponse invalid(String requestId) {
-        return new VerifyResponse("INVALID", Instant.now(), requestId, null, null, null, null, null);
+        return new VerifyResponse("INVALID", Instant.now(), requestId, null, null, null, null, null, null);
     }
 
     /** INVALID for a client trusted with diagnostics. */
     public static VerifyResponse invalid(String requestId, VerificationFailure reason) {
-        return new VerifyResponse("INVALID", Instant.now(), requestId, null, null, null, null, reason);
+        return new VerifyResponse("INVALID", Instant.now(), requestId, null, null, null, null, null, reason);
     }
 }

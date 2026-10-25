@@ -143,6 +143,8 @@ postalid:
     # An expired card still verifies by default, reported as validity.status = EXPIRED.
     # The identity checked out; that is a different fact from the card being current.
     treat-expired-as-invalid: false
+    # Card dates are Philippine calendar dates, so expiry is judged on the Manila calendar.
+    time-zone: Asia/Manila
 
   media:
     token-ttl: 5m
@@ -167,6 +169,18 @@ postalid:
     verify-per-client-per-minute: 300
     verify-per-ip-per-minute: 100
     image-per-client-per-minute: 600
+    # Kept apart from the verify budget: one VALID result is normally followed by two image fetches.
+    image-per-ip-per-minute: 300
+    # A person at a counter manages a few checks a minute; this ceiling is for scripts.
+    verify-per-operator-per-minute: 30
+    # /oauth2/token (and introspect/revoke) per source address. Tokens live 5 minutes, so a
+    # client needs about one request every few minutes; this caps BCrypt work per address.
+    token-per-ip-per-minute: 20
+    # Failed client authentications per client id per hour (OWASP ASVS V2.2.1 ceiling).
+    token-failures-per-client-per-hour: 100
+    # Console sign-in: attempts per address per minute, and failures per username per hour.
+    login-per-ip-per-minute: 10
+    login-failures-per-user-per-hour: 20
     invalid-burst-threshold: 20
     invalid-lookback: 10m
     invalid-penalty: 5m

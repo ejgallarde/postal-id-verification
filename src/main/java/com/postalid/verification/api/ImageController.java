@@ -1,5 +1,6 @@
 package com.postalid.verification.api;
 
+import com.postalid.verification.audit.VerificationContext;
 import com.postalid.verification.media.ImageDeliveryService;
 import com.postalid.verification.media.WebImage;
 import com.postalid.verification.web.RateLimiter;
@@ -30,7 +31,7 @@ import static org.springframework.http.HttpStatus.NOT_FOUND;
  * reference minted by a successful verification, which is what keeps the endpoint from being
  * enumerable: guessing a working reference means guessing 256 bits.
  *
- * <p>Every unusable reference — unknown, expired, spent, revoked, or pointing at a document type
+ * <p>Every unusable reference — unknown, issued to another client, expired, spent, revoked, or pointing at a document type
  * that is not servable — produces the same 404. Distinguishing them would confirm which
  * references had once been real.
  */
@@ -79,13 +80,14 @@ public class ImageController {
             @Parameter(description = "Opaque reference from a VALID verification response")
             @PathVariable String reference) {
 
-        RateLimiter.Decision decision =
-                rateLimiter.checkImageByClient(RequestContextSupport.currentClientId());
+        String clientId = RequestContextSupport.currentClientId();
+        RateLimiter.Decision decision = rateLimiter.checkImageByClient(clientId);
         if (!decision.allowed()) {
             throw new RateLimitExceededException(decision.retryAfterSeconds());
         }
 
-        WebImage image = imageDeliveryService.deliver(reference)
+        String holder = VerificationContext.imageHolder(VerificationContext.Channel.API, clientId);
+        WebImage image = imageDeliveryService.deliver(reference, holder)
                 .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Image reference is not valid"));
 
         return ResponseEntity.ok()

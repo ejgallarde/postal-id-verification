@@ -10,9 +10,11 @@ import com.postalid.verification.media.WebImage;
 import com.postalid.verification.verify.VerificationFacade;
 import com.postalid.verification.verify.VerificationQuery;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
@@ -47,6 +49,12 @@ import static org.springframework.http.HttpStatus.NOT_FOUND;
 @Controller
 public class VerificationUiController {
 
+    /**
+     * Namespaces operators apart from OAuth clients in the enumeration throttle, so an operator
+     * whose username happens to equal a client id cannot trip, or reset, that client's count.
+     */
+    private static final String OPERATOR_KEY_PREFIX = "operator:";
+
     /** Shown on the comparison view's provenance band. */
     private static final DateTimeFormatter VERIFIED_AT =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm 'UTC'").withZone(ZoneOffset.UTC);
@@ -55,17 +63,23 @@ public class VerificationUiController {
     private final ImageDeliveryService imageDeliveryService;
     private final CardResponseMapper mapper;
     private final QrCodeRenderer qrCodeRenderer;
+    private final RateLimiter rateLimiter;
+    private final EnumerationThrottle enumerationThrottle;
     private final PostalIdProperties properties;
 
     public VerificationUiController(VerificationFacade verificationFacade,
                                     ImageDeliveryService imageDeliveryService,
                                     CardResponseMapper mapper,
                                     QrCodeRenderer qrCodeRenderer,
+                                    RateLimiter rateLimiter,
+                                    EnumerationThrottle enumerationThrottle,
                                     PostalIdProperties properties) {
         this.verificationFacade = verificationFacade;
         this.imageDeliveryService = imageDeliveryService;
         this.mapper = mapper;
         this.qrCodeRenderer = qrCodeRenderer;
+        this.rateLimiter = rateLimiter;
+        this.enumerationThrottle = enumerationThrottle;
         this.properties = properties;
     }
 
@@ -84,17 +98,34 @@ public class VerificationUiController {
     public String submit(@Valid @ModelAttribute("form") VerifyForm form,
                          BindingResult binding,
                          HttpServletRequest request,
+                         HttpServletResponse response,
                          Model model) {
 
         if (binding.hasErrors()) {
             return "verify";
         }
 
+        // The same two controls the API applies per client, applied per operator. A session is a
+        // credential like any other, and without these a script driving a logged-in browser
+        // would face only the per-address budget.
+        String operator = RequestContextSupport.currentPrincipalName();
+        String throttleKey = OPERATOR_KEY_PREFIX + operator;
+
+        RateLimiter.Decision decision = rateLimiter.checkVerifyByOperator(operator);
+        long retryAfter = decision.allowed() ? enumerationThrottle.retryAfterSeconds(throttleKey)
+                                             : decision.retryAfterSeconds();
+        if (retryAfter > 0) {
+            response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
+            response.setHeader(HttpHeaders.RETRY_AFTER, String.valueOf(retryAfter));
+            model.addAttribute("retryAfterSeconds", retryAfter);
+            return "verify";
+        }
+
         String requestId = UUID.randomUUID().toString();
         VerificationContext context = new VerificationContext(
                 requestId,
-                RequestContextSupport.currentPrincipalName(),
-                RequestContextSupport.currentPrincipalName(),
+                operator,
+                operator,
                 VerificationContext.Channel.WEB,
                 RequestContextSupport.remoteIp(request),
                 RequestContextSupport.userAgent(request));
@@ -107,6 +138,12 @@ public class VerificationUiController {
                         form.getLastName(),
                         form.getDateOfBirth()),
                 context);
+
+        if (result.valid()) {
+            enumerationThrottle.recordSuccess(throttleKey, result.matchedRecordId());
+        } else {
+            enumerationThrottle.recordFailure(throttleKey);
+        }
 
         Map<String, String> references = result.imageReferences();
         model.addAttribute("valid", result.valid());
@@ -136,7 +173,9 @@ public class VerificationUiController {
     /** Serves an image to the logged-in operator's browser using the same reference the API uses. */
     @GetMapping("/ui/images/{reference}")
     public ResponseEntity<byte[]> image(@PathVariable String reference) {
-        WebImage image = imageDeliveryService.deliver(reference)
+        String holder = VerificationContext.imageHolder(
+                VerificationContext.Channel.WEB, RequestContextSupport.currentPrincipalName());
+        WebImage image = imageDeliveryService.deliver(reference, holder)
                 .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Image reference is not valid"));
 
         return ResponseEntity.ok()
@@ -164,13 +203,19 @@ public class VerificationUiController {
 
         @jakarta.validation.constraints.NotBlank(message = "First name is required")
         @jakarta.validation.constraints.Size(max = 120, message = "First name is too long")
+        @jakarta.validation.constraints.Pattern(regexp = VerifyRequest.NAME_PATTERN,
+                message = "First name contains unsupported characters")
         private String firstName;
 
         @jakarta.validation.constraints.Size(max = 120, message = "Middle name is too long")
+        @jakarta.validation.constraints.Pattern(regexp = VerifyRequest.OPTIONAL_NAME_PATTERN,
+                message = "Middle name contains unsupported characters")
         private String middleName;
 
         @jakarta.validation.constraints.NotBlank(message = "Surname is required")
         @jakarta.validation.constraints.Size(max = 120, message = "Surname is too long")
+        @jakarta.validation.constraints.Pattern(regexp = VerifyRequest.NAME_PATTERN,
+                message = "Surname contains unsupported characters")
         private String lastName;
 
         @jakarta.validation.constraints.NotNull(message = "Date of birth is required")

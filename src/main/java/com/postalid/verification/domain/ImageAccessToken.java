@@ -48,16 +48,6 @@ public class ImageAccessToken {
     @Column(name = "revoked", nullable = false)
     private boolean revoked;
 
-    public boolean isUsable(Instant now) {
-        return !revoked && usesRemaining > 0 && now.isBefore(expiresAt);
-    }
-
-    public void consumeUse() {
-        if (usesRemaining > 0) {
-            usesRemaining--;
-        }
-    }
-
     public Long getId() { return id; }
 
     public String getTokenHash() { return tokenHash; }

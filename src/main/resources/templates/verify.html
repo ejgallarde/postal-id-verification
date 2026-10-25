@@ -11,6 +11,14 @@
     required.
   </p>
 
+  <!-- Deliberately does not say which limit tripped: the per-minute budget or a run of refusals. -->
+  <div class="alert alert-warn" th:if="${retryAfterSeconds != null}" role="alert">
+    <strong>Too many checks in a short time.</strong>
+    Wait <span th:text="${retryAfterSeconds}">60</span>
+    <span th:text="${retryAfterSeconds == 1} ? 'second' : 'seconds'">seconds</span> before verifying again.
+    Repeated non-matching checks are paused automatically and reviewed in the audit trail.
+  </div>
+
   <div class="alert alert-error" th:if="${#fields.hasErrors('${form.*}')}" role="alert">
     <strong>Check the form.</strong>
     <ul>

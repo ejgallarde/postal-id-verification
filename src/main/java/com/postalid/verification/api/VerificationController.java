@@ -1,5 +1,8 @@
 package com.postalid.verification.api;
 
+import com.postalid.verification.api.dto.CardValidity;
+import com.postalid.verification.api.dto.CardholderDetails;
+import com.postalid.verification.api.dto.InlineImage;
 import com.postalid.verification.api.dto.VerifyRequest;
 import com.postalid.verification.api.dto.VerifyResponse;
 import com.postalid.verification.audit.VerificationContext;
@@ -11,6 +14,8 @@ import com.postalid.verification.web.EnumerationThrottle;
 import com.postalid.verification.web.RateLimiter;
 import com.postalid.verification.web.RequestContextSupport;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -19,15 +24,19 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
@@ -46,6 +55,18 @@ public class VerificationController {
 
     /** Grants a client the field-level failure detail on an INVALID result. */
     private static final String DIAGNOSTICS_AUTHORITY = "SCOPE_postalid.diagnostics";
+
+    /** Needed to fetch images, and equally to have them embedded. */
+    private static final String IMAGES_AUTHORITY = "SCOPE_postalid.images";
+
+    /** The one value {@code include} accepts today. */
+    static final String INCLUDE_IMAGES = "images";
+
+    /**
+     * Image fetches an inline verification is charged: the photograph and the signature, the two
+     * document types that are ever retrievable.
+     */
+    private static final int INLINE_IMAGE_COST = 2;
 
     private final VerificationFacade verificationFacade;
     private final RateLimiter rateLimiter;
@@ -79,6 +100,11 @@ public class VerificationController {
                     card's validity window, and short-lived relative URLs for the photograph and
                     signature. Fetching the images needs the postalid.images scope.
 
+                    To get the images in the same response instead, add ?include=images. The
+                    photo and signature then arrive base64-encoded under imageData, and no URLs are
+                    issued. This also needs the postalid.images scope, and each verification asking
+                    for it draws two fetches from the client's image budget.
+
                     Expiry is derived, not supplied by the source data: it is the card's production
                     date plus a configured validity period, and is flagged as derived. An expired
                     card still returns VALID with validity.status = EXPIRED, because the identity
@@ -100,16 +126,30 @@ public class VerificationController {
             @ApiResponse(responseCode = "401",
                     description = "Missing, expired or invalid access token.", content = @io.swagger.v3.oas.annotations.media.Content()),
             @ApiResponse(responseCode = "403",
-                    description = "Token lacks the postalid.verify scope.", content = @io.swagger.v3.oas.annotations.media.Content()),
+                    description = "Token lacks the postalid.verify scope, or asked for include=images "
+                            + "without postalid.images.", content = @io.swagger.v3.oas.annotations.media.Content()),
             @ApiResponse(responseCode = "429",
                     description = "Rate limit exceeded; see the Retry-After header.", content = @io.swagger.v3.oas.annotations.media.Content())
     })
     @PostMapping("/verify")
     @PreAuthorize("hasAuthority('SCOPE_postalid.verify')")
-    public ResponseEntity<VerifyResponse> verify(@Valid @RequestBody VerifyRequest request,
-                                                 HttpServletRequest httpRequest) {
+    public ResponseEntity<VerifyResponse> verify(
+            @Valid @RequestBody VerifyRequest request,
+            @Parameter(description = "Extra content to embed in a VALID response. The only value is "
+                    + "`images`, which returns the photo and signature inline as base64 instead of as "
+                    + "URLs to fetch. Requires the postalid.images scope.",
+                    schema = @Schema(allowableValues = {INCLUDE_IMAGES}))
+            @RequestParam(name = "include", required = false) List<String> include,
+            HttpServletRequest httpRequest) {
 
         String clientId = RequestContextSupport.currentClientId();
+        boolean inlineImages = parseInclude(include);
+
+        // Checked before any budget is spent or any verification runs: a caller asking for images
+        // it may not have must learn that from the request, not from a VALID it then cannot use.
+        if (inlineImages && !hasAuthority(IMAGES_AUTHORITY)) {
+            throw new AccessDeniedException("include=images requires the postalid.images scope");
+        }
 
         // The filter already applied the per-address budget. Now that the token is validated and
         // the client is known, apply the per-client budget too.
@@ -123,6 +163,16 @@ public class VerificationController {
         long penalty = enumerationThrottle.retryAfterSeconds(clientId);
         if (penalty > 0) {
             throw new RateLimitExceededException(penalty);
+        }
+
+        // Inline images are the same two fetches the client would otherwise make, so they draw on
+        // the same image budget. Charged up front, before the result is known, because charging
+        // only VALIDs would let the image budget reveal which submissions matched.
+        if (inlineImages) {
+            RateLimiter.Decision imageDecision = rateLimiter.checkImageByClient(clientId, INLINE_IMAGE_COST);
+            if (!imageDecision.allowed()) {
+                throw new RateLimitExceededException(imageDecision.retryAfterSeconds());
+            }
         }
 
         String requestId = UUID.randomUUID().toString();
@@ -141,10 +191,11 @@ public class VerificationController {
                 request.lastName(),
                 request.dateOfBirth());
 
-        VerificationFacade.Result result = verificationFacade.verify(query, context);
+        VerificationFacade.Result result = verificationFacade.verify(query, context,
+                inlineImages ? VerificationFacade.ImageDelivery.INLINE : VerificationFacade.ImageDelivery.REFERENCES);
 
         if (result.valid()) {
-            enumerationThrottle.recordSuccess(clientId);
+            enumerationThrottle.recordSuccess(clientId, result.matchedRecordId());
         } else {
             enumerationThrottle.recordFailure(clientId);
         }
@@ -168,12 +219,56 @@ public class VerificationController {
     }
 
     private VerifyResponse buildValidResponse(String requestId, VerificationFacade.Result result) {
+        CardholderDetails cardholder = result.outcome().matchedCardholder().map(mapper::toDetails).orElse(null);
+        CardValidity validity = mapper.toValidity(result.outcome().validity());
+
+        if (!result.inlineImages().isEmpty()) {
+            Map<String, InlineImage> imageData = new LinkedHashMap<>();
+            result.inlineImages().forEach((code, image) ->
+                    imageData.put(friendlyKey(code), InlineImage.of(image.contentType(), image.data())));
+            return VerifyResponse.validWithImageData(requestId, cardholder, validity, imageData);
+        }
+
         return VerifyResponse.valid(
                 requestId,
-                result.outcome().matchedCardholder().map(mapper::toDetails).orElse(null),
-                mapper.toValidity(result.outcome().validity()),
+                cardholder,
+                validity,
                 toImageUrls(result.imageReferences()),
                 properties.getMedia().getTokenTtl().toSeconds());
+    }
+
+    /**
+     * Reads the {@code include} parameter. Accepts {@code include=images}, a comma-separated list
+     * or a repeated parameter, so that later additions read the same way.
+     *
+     * <p>An unrecognised value is a 400, not silently ignored: a client that typed
+     * {@code include=image} would otherwise get URLs, assume inline delivery is broken, and never
+     * learn why.
+     *
+     * @return whether images were asked for
+     */
+    private static boolean parseInclude(List<String> include) {
+        if (include == null) {
+            return false;
+        }
+        boolean images = false;
+        for (String value : include) {
+            String token = value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+            if (token.isEmpty()) {
+                continue;
+            }
+            if (!INCLUDE_IMAGES.equals(token)) {
+                throw new UnsupportedIncludeException(INCLUDE_IMAGES);
+            }
+            images = true;
+        }
+        return images;
+    }
+
+    private static boolean hasAuthority(String authority) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        return authentication != null && authentication.getAuthorities().stream()
+                .anyMatch(granted -> authority.equals(granted.getAuthority()));
     }
 
     /**
@@ -189,9 +284,7 @@ public class VerificationController {
     }
 
     private boolean hasDiagnosticsScope() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        return authentication != null && authentication.getAuthorities().stream()
-                .anyMatch(granted -> DIAGNOSTICS_AUTHORITY.equals(granted.getAuthority()));
+        return hasAuthority(DIAGNOSTICS_AUTHORITY);
     }
 
     /** Maps document codes to the friendlier keys the API contract exposes. */
@@ -208,6 +301,6 @@ public class VerificationController {
         if (DocumentType.SIGNATURE.equals(docCode)) {
             return "signature";
         }
-        return docCode.toLowerCase(java.util.Locale.ROOT);
+        return docCode.toLowerCase(Locale.ROOT);
     }
 }

@@ -15,12 +15,25 @@
 
 <body>
 <header th:fragment="header" class="site-header">
+  <!--
+    The slim band government sites carry above their own header, naming the Republic first and
+    the agency second. Plain text: no seal, whose use is regulated (RA 8491) and which a staff
+    tool has no need to borrow.
+  -->
+  <div class="gov-band">
+    <div class="wrap gov-band-inner">
+      <span>Republic of the Philippines</span>
+      <span class="gov-band-agency">Philippine Postal Corporation</span>
+    </div>
+  </div>
   <div class="wrap header-inner">
     <!--
-      The logo is a supplied asset, so the wordmark stands in when it is absent rather than
+      The logos are supplied assets, so the wordmark stands in when one is absent rather than
       leaving a broken image on the page that vouches for someone's identity.
     -->
     <a class="brand" th:href="@{/}">
+      <img th:if="${govMarkAvailable}" class="brand-gov"
+           th:src="@{/img/bagong-pilipinas-mark.png}" alt="Bagong Pilipinas">
       <img th:if="${brandLogoAvailable}" class="brand-logo"
            th:src="@{/img/phlpost-logo.png}" alt="PHLPost">
       <span th:unless="${brandLogoAvailable}" class="brand-mark" aria-hidden="true">PHLPOST</span>
@@ -38,10 +51,13 @@
 </header>
 
 <footer th:fragment="footer" class="site-footer">
-  <div class="wrap">
+  <div class="wrap footer-inner">
     <p>
-      Verification results and cardholder images are personal data. Every check is recorded
-      against your account.
+      Verification results and cardholder images are personal data, processed under the
+      Data Privacy Act of 2012 (RA 10173). Every check is recorded against your account.
+    </p>
+    <p class="footer-agency">
+      Philippine Postal Corporation · PIVOT
     </p>
   </div>
 </footer>

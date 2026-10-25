@@ -22,6 +22,10 @@ server:
   servlet:
     session:
       cookie:
+        # Its own name: browsers share cookies across ports, so a sandbox or another app on
+        # localhost using JSESSIONID would overwrite this session and every form post would then
+        # fail its CSRF check with 403.
+        name: PIVOT_DEV_SESSION
         # Plain HTTP locally, so a secure-only cookie would never be sent back.
         secure: false
 

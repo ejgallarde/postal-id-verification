@@ -60,15 +60,6 @@ public class AuditService {
         repository.save(audit);
     }
 
-    /** How many INVALID results this client has produced since the given instant. */
-    @Transactional(readOnly = true)
-    public long countRecentInvalid(String clientId, Instant since) {
-        if (clientId == null) {
-            return 0;
-        }
-        return repository.countByClientIdAndResultAndCreatedAtAfter(clientId, "INVALID", since);
-    }
-
     private static String truncate(String value) {
         if (value == null) {
             return null;

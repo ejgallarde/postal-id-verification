@@ -56,7 +56,7 @@ body.centered {
     padding-bottom: 14px;
 }
 
-.brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--ink); }
+.brand { display: flex; align-items: center; gap: 12px; text-decoration: none; color: var(--ink); }
 
 .brand-mark {
     background: var(--accent);
@@ -191,12 +191,58 @@ input:focus {
 
 @media (max-width: 560px) {
     .field-row { flex-direction: column; gap: 0; }
+    /* Stacked vertically, a 220px flex-basis would become a 220px height. */
+    .field-row .field { flex-basis: auto; }
     .images figure.signature img { width: 100%; }
 }
 
 /* --- Brand mark --- */
 
 .brand-logo { display: block; height: 30px; width: auto; }
+
+/* Square-ish national mark ahead of the agency logo, sized up slightly so its lettering reads. */
+.brand-gov { display: block; height: 44px; width: auto; }
+
+/* --- Government band ---------------------------------------------------
+   The thin line above the header that government sites use to name the Republic
+   and the agency. A tricolour rule beneath it carries the flag's colours without
+   reproducing the flag itself.
+   ---------------------------------------------------------------------- */
+
+.gov-band {
+    background: var(--accent-dark);
+    color: rgba(255, 255, 255, .88);
+    font-size: 12px;
+    letter-spacing: .03em;
+    border-bottom: 3px solid transparent;
+    border-image: linear-gradient(90deg, var(--accent) 0 33.3%, var(--phl-red) 33.3% 66.6%, var(--phl-gold) 66.6% 100%) 1;
+}
+
+.gov-band-inner {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding-top: 5px;
+    padding-bottom: 5px;
+}
+
+.gov-band-agency { color: rgba(255, 255, 255, .7); }
+
+/* On a phone the two marks and the sign-out control are all the header can hold. The toolkit
+   name is in the page title and on the sign-in page; the operator name is on every audit row. */
+@media (max-width: 560px) {
+    .gov-band-agency { display: none; }
+    .brand-gov { height: 34px; }
+    .brand-logo { height: 22px; }
+    .brand .brand-text, .operator { display: none; }
+    .header-inner { gap: 10px; }
+}
+
+.alert-warn { background: #fff6e0; color: #7a4f00; border-left: 4px solid var(--phl-gold); }
+
+.footer-inner { display: flex; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
+.footer-inner p { margin: 0; max-width: 560px; }
+.footer-agency { font-weight: 600; color: var(--ink-soft); white-space: nowrap; }
 
 .brand-text {
     display: flex;
@@ -448,12 +494,17 @@ input:focus {
 .login-card .form, .login-card .alert { text-align: left; }
 
 .login-brand {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
     padding-bottom: 18px;
     margin-bottom: 18px;
     border-bottom: 1px solid var(--line);
 }
 
-.login-logo { display: block; width: 100%; max-width: 230px; height: auto; margin: 0 auto; }
+.login-gov { display: block; height: 64px; width: auto; flex: 0 0 auto; }
+.login-logo { display: block; width: 100%; max-width: 230px; min-width: 0; height: auto; }
 
 .login-wordmark {
     display: inline-block;

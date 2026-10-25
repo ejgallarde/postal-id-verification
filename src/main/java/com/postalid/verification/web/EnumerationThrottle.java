@@ -16,7 +16,13 @@ import java.time.Instant;
  * <p>The plain rate limit stops a flood. It does nothing about a client that verifies steadily,
  * within budget, and is wrong almost every time — which is exactly what walking a range of
  * reference numbers looks like. A legitimate caller checks cards people actually hold, so its
- * failure rate is low; a caller failing dozens of times in a row is doing something else.
+ * failure rate is low; a caller failing dozens of times over is doing something else.
+ *
+ * <p>The count is net, not consecutive. A VALID result earns back a single failure rather than
+ * clearing the slate, and only the first VALID for a given card in the lookback window earns
+ * anything. Otherwise one card the caller already knows to be good, replayed every nineteen
+ * guesses, would keep the count below the threshold forever. With this rule a prober needs a
+ * fresh genuine card for every guess, which is the same as not needing to guess.
  *
  * <p>Counting is deliberately in memory rather than by querying the audit table on every request:
  * a database round trip per verification to decide whether to allow a verification is a poor trade,
@@ -32,8 +38,11 @@ public class EnumerationThrottle {
 
     private final PostalIdProperties.RateLimit config;
 
-    /** Consecutive INVALID results per caller, expiring on the configured lookback. */
-    private final Cache<String, Integer> consecutiveFailures;
+    /** Net INVALID results per caller, expiring once a caller has been quiet for the lookback. */
+    private final Cache<String, Integer> netFailures;
+
+    /** Caller-and-card pairs that have already earned their credit within the lookback. */
+    private final Cache<String, Boolean> creditedCards;
 
     /** Callers currently serving a penalty, expiring when it lapses. */
     private final Cache<String, Instant> penalised;
@@ -42,7 +51,11 @@ public class EnumerationThrottle {
         this.config = properties.getRateLimit();
 
         Duration lookback = config.getInvalidLookback();
-        this.consecutiveFailures = Caffeine.newBuilder()
+        this.netFailures = Caffeine.newBuilder()
+                .expireAfterWrite(lookback)
+                .maximumSize(100_000)
+                .build();
+        this.creditedCards = Caffeine.newBuilder()
                 .expireAfterWrite(lookback)
                 .maximumSize(100_000)
                 .build();
@@ -82,25 +95,36 @@ public class EnumerationThrottle {
         }
 
         String key = key(caller);
-        int failures = consecutiveFailures.asMap().merge(key, 1, Integer::sum);
+        int failures = netFailures.asMap().merge(key, 1, Integer::sum);
 
         if (failures >= config.getInvalidBurstThreshold()) {
             Instant until = Instant.now().plus(config.getInvalidPenalty());
             penalised.put(key, until);
-            consecutiveFailures.invalidate(key);
+            netFailures.invalidate(key);
 
             // Worth a warning: this is the signature of someone walking reference numbers, and an
             // operator reviewing the audit trail should be able to find it from the log too.
-            log.warn("Throttling caller '{}' after {} consecutive INVALID results; blocked for {}",
+            log.warn("Throttling caller '{}' after {} net INVALID results; blocked for {}",
                     key, failures, config.getInvalidPenalty());
         }
     }
 
-    /** A verification succeeded, so the caller is behaving like a legitimate one again. */
-    public void recordSuccess(String caller) {
-        if (config.isEnabled()) {
-            consecutiveFailures.invalidate(key(caller));
+    /**
+     * A verification succeeded. Earns back one failure, the first time this caller verifies this
+     * card within the lookback window; repeats of the same card earn nothing.
+     *
+     * @param card a stable identifier for the matched record, such as its record id
+     */
+    public void recordSuccess(String caller, String card) {
+        if (!config.isEnabled()) {
+            return;
         }
+
+        String key = key(caller);
+        if (creditedCards.asMap().putIfAbsent(key + "|" + card, Boolean.TRUE) != null) {
+            return;
+        }
+        netFailures.asMap().computeIfPresent(key, (ignored, failures) -> failures > 1 ? failures - 1 : null);
     }
 
     private static String key(String caller) {

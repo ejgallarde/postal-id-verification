@@ -36,7 +36,7 @@ public class CardValidityResolver {
     @Autowired
     public CardValidityResolver(CardStatusHistoryRepository statusRepository,
                                 PostalIdProperties properties) {
-        this(statusRepository, properties, Clock.systemDefaultZone());
+        this(statusRepository, properties, Clock.system(properties.getVerify().getTimeZone()));
     }
 
     /** Test seam: lets a fixed clock be injected so expiry assertions are deterministic. */

@@ -4,12 +4,14 @@ import com.postalid.verification.api.dto.CardValidity;
 import com.postalid.verification.api.dto.CardholderAddress;
 import com.postalid.verification.api.dto.CardholderDetails;
 import com.postalid.verification.api.dto.VerificationFailure;
+import com.postalid.verification.config.PostalIdProperties;
 import com.postalid.verification.domain.Cardholder;
 import com.postalid.verification.verify.CardValidityWindow;
 import com.postalid.verification.verify.FailureReason;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 
@@ -23,6 +25,13 @@ import java.util.List;
  */
 @Component
 public class CardResponseMapper {
+
+    /** Same calendar the expiry decision uses, so the day count and the status never disagree. */
+    private final ZoneId timeZone;
+
+    public CardResponseMapper(PostalIdProperties properties) {
+        this.timeZone = properties.getVerify().getTimeZone();
+    }
 
     /**
      * The cardholder details a verifier receives: what is printed on the card, and nothing else.
@@ -68,7 +77,7 @@ public class CardResponseMapper {
             return new CardValidity(window.issuedOn(), null, CardValidity.UNKNOWN, null, Boolean.TRUE);
         }
 
-        long days = ChronoUnit.DAYS.between(LocalDate.now(), expiresOn);
+        long days = ChronoUnit.DAYS.between(LocalDate.now(timeZone), expiresOn);
         String status = window.expired() ? CardValidity.EXPIRED : CardValidity.ACTIVE;
 
         return new CardValidity(window.issuedOn(), expiresOn, status, days, Boolean.TRUE);

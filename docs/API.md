@@ -62,7 +62,7 @@ scope, everything above applies to you unchanged.
 | Field | Rule |
 |---|---|
 | `postalRefNo` | Exact, after normalization |
-| `lastName` | Exact, after normalization |
+| `lastName` | Exact after normalization, **with spaces ignored**: `DELA CRUZ` = `DELACRUZ`, `LIBUIT ARROYO` = `LIBUIT-ARROYO` |
 | `firstName` | Exact, after normalization |
 | `middleName` | Full name, **or** a single letter matching the stored initial, **or** absent if the record has none |
 | `dateOfBirth` | Exact calendar date |
@@ -72,8 +72,11 @@ whitespace, uppercase, decompose accented characters and drop the accents, remov
 and `,`, then collapse runs of whitespace. So `  josé o'brien-smith  ` and `JOSE OBRIENSMITH`
 compare equal.
 
-Two consequences worth knowing:
+Three consequences worth knowing:
 
+- **Surnames ignore spaces.** Compound surnames are written both ways, and a hyphen is often typed
+  as a space, so `DELA CRUZ`, `DELACRUZ` and `DE LA CRUZ` all match one another. First names keep
+  their spaces, because there a space separates two names: `EARLJOHN` does not match `EARL JOHN`.
 - **A middle initial is accepted.** Many cards print only the initial. `R`, `R.` and `REYES` all
   match a stored `REYES`.
 - **Omitting a middle name the record has is rejected**, by default. The service can be configured
@@ -289,7 +292,55 @@ justify it.
 | `verifiedAt` | When the check ran, ISO-8601 UTC |
 | `requestId` | Correlation id, also on the `X-Request-Id` header and in the audit trail. Quote it in support requests |
 | `images` | Present only on `VALID`. Relative URLs, keyed `photo` and `signature`. A key is absent if that image was never captured |
-| `imagesExpireIn` | Present only on `VALID`. Seconds until the references stop working |
+| `imagesExpireIn` | Present only on `VALID` without `include=images`. Seconds until the references stop working |
+| `imageData` | Present only on `VALID` with `include=images`. The images themselves, base64, keyed like `images` |
+
+### Images in the same response: `?include=images`
+
+By default a `VALID` response carries image **URLs**, and you fetch each one separately. If you
+would rather have everything in one round trip, ask for the images inline:
+
+```
+POST /api/v1/verify?include=images
+```
+
+The photo and signature then arrive base64-encoded under `imageData`, and `images` and
+`imagesExpireIn` are absent, because there is nothing left to fetch:
+
+```json
+{
+  "result": "VALID",
+  "cardholder": { "...": "..." },
+  "validity":   { "...": "..." },
+  "imageData": {
+    "photo":     { "contentType": "image/jpeg", "data": "/9j/4AAQSkZJRgABAQAAAQ...", "byteLength": 18342 },
+    "signature": { "contentType": "image/png",  "data": "iVBORw0KGgoAAAANSUhEUg...", "byteLength": 4211 }
+  }
+}
+```
+
+| | Separate fetches (default) | `include=images` |
+|---|---|---|
+| Round trips | 3 | 1 |
+| Response size | Small | Larger by the images plus a third (base64) |
+| Scope needed | `postalid.images` to fetch | `postalid.images` to ask |
+| Image budget used | 1 per fetch | 2 per verification, charged up front |
+
+Things to know:
+
+- **It is a query parameter, not a body field.** The body describes the card being checked; how
+  you want the answer delivered is a separate concern. A comma-separated list or a repeated
+  parameter is accepted, so later additions will read the same way.
+- **Without `postalid.images` the request is refused with `403`**, before anything is verified.
+- **An unrecognised value is a `400`** naming `include`, rather than being silently ignored.
+- **An INVALID response is unchanged.** It never carries `imageData`.
+- **The image budget is charged whether or not the result is VALID.** Charging only matches would
+  let the budget reveal which submissions matched.
+- **Base64-decoded bytes are personal data.** Hold them with the same care as the card itself, and
+  keep them out of your request logs.
+
+Use it when a round trip is expensive, for example from a mobile network. Leave it off if you only
+need the verdict: most verifiers never look at the images, and the default response stays small.
 
 ### Why INVALID is 200 and not 404
 
@@ -340,7 +391,9 @@ re-encoding it as PNG would multiply its size for no benefit.
 
 - **Expiry**: 5 minutes from issue (`imagesExpireIn` gives the exact figure).
 - **Uses**: 5 fetches per reference, so a page reload or a retried load still works.
-- **Binding**: one reference addresses one image of one cardholder.
+- **Binding**: one reference addresses one image of one cardholder, and only the client whose
+  verification produced it can redeem it. Another client gets the same `404` as for a reference
+  that never existed.
 
 A reference that is unknown, expired, exhausted or revoked all return the same `404`. They are
 indistinguishable on purpose: telling them apart would confirm which references had once been
@@ -376,8 +429,8 @@ Errors are RFC 9457 problem documents, `Content-Type: application/problem+json`.
 | `400` | `validation-failed` | A field is missing or breaks its constraints. `errors` names each one |
 | `400` | `malformed-request` | The body is not JSON matching the schema |
 | `401` | — | Token missing, expired, malformed, or not for this audience |
-| `403` | — | Token valid but lacks the required scope |
-| `404` | — | Image reference unknown, expired or exhausted |
+| `403` | — | Token valid but lacks the required scope (including `include=images` without `postalid.images`) |
+| `404` | — | Image reference unknown, issued to another client, expired or exhausted |
 | `413` | `payload-too-large` | Request body above the size cap; refused before it is parsed |
 | `415` | — | Unsupported `Content-Type`; send `application/json` |
 | `406` | — | Requested representation is unavailable; this API returns JSON |
@@ -399,12 +452,41 @@ Two budgets apply to verification, and both must pass:
 | Verifications per client per minute | 300 |
 | Verifications per source address per minute | 100 |
 | Image fetches per client per minute | 600 |
+| Image fetches per source address per minute | 300 |
+| Token requests per source address per minute | 20 |
+| Failed client authentications per client id per hour | 100 |
+
+Image fetches have their own budget, so fetching the photo and signature after a `VALID` never
+uses up your verification allowance.
 
 Tokens refill continuously rather than resetting on the minute, so a client that paces itself is
 never blocked by a boundary.
 
 Exceeding a budget returns `429` with a `Retry-After` header in seconds. Honour it; retrying
 sooner consumes budget without succeeding.
+
+### The token endpoint
+
+`/oauth2/token` has its own two limits, checked before your secret is:
+
+- **20 requests per minute per address.** A token lives five minutes, so a client needs about one
+  token request per instance every few minutes. Cache your token (see
+  [Client implementation notes](#8-client-implementation-notes)); a client that requests one per
+  API call will hit this.
+- **100 failed authentications per hour per client id**, across all addresses. This is the
+  ceiling OWASP ASVS V2.2.1 sets for a single credential. Once a client id reaches it, every token
+  request for that id gets `429`, even one with the correct secret, until the budget refills at
+  about one attempt every 36 seconds. Successful requests never count against it.
+
+A refusal here uses the OAuth error shape rather than a problem document, because OAuth client
+libraries are what read it:
+
+```
+HTTP/1.1 429 Too Many Requests
+Retry-After: 3
+
+{"error":"too_many_requests","error_description":"Token request rate exceeded. Retry after 3 seconds."}
+```
 
 Defaults are deployment-configurable — check with the service operator for your environment.
 

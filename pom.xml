@@ -18,13 +18,15 @@
   <description>Web UI and secured REST API for validating Postal Identification cards</description>
 
   <properties>
-    <java.version>17</java.version>
+    <java.version>25</java.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <springdoc.version>2.8.17</springdoc.version>
     <twelvemonkeys.version>3.14.0</twelvemonkeys.version>
     <bucket4j.version>8.19.0</bucket4j.version>
     <commons-csv.version>1.14.1</commons-csv.version>
     <zxing.version>3.5.4</zxing.version>
+    <!-- Empty default so the surefire argLine below can extend it with @{argLine}. -->
+    <argLine></argLine>
   </properties>
 
   <dependencies>
@@ -153,9 +155,27 @@
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-maven-plugin</artifactId>
       </plugin>
+      <!--
+        Exposes each dependency's jar path as a property, so the Mockito agent below can be named
+        by path. JDK 21+ warns when an agent attaches itself at runtime and a future release will
+        refuse it; loading it explicitly with -javaagent is the supported route. -Xshare:off
+        silences the class-data-sharing notice an agent on the boot classpath otherwise prints.
+      -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-dependency-plugin</artifactId>
+        <executions>
+          <execution>
+            <goals><goal>properties</goal></goals>
+          </execution>
+        </executions>
+      </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <argLine>@{argLine} -javaagent:${org.mockito:mockito-core:jar} -Xshare:off</argLine>
+        </configuration>
       </plugin>
     </plugins>
   </build>

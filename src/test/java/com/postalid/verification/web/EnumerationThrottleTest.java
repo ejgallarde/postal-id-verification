@@ -52,20 +52,51 @@ class EnumerationThrottleTest {
     }
 
     @Test
-    @DisplayName("a success clears the run, so an occasional typo never accumulates")
-    void successResetsTheCount() {
+    @DisplayName("a success on a new card earns back one failure, so an occasional typo never accumulates")
+    void successOnDistinctCardEarnsCredit() {
+        EnumerationThrottle throttle = throttleAfter(5);
+
+        // A legitimate counter: a typo, then the corrected entry, card after card.
+        for (int card = 0; card < 50; card++) {
+            throttle.recordFailure("client-a");
+            throttle.recordSuccess("client-a", "record-" + card);
+        }
+        assertThat(throttle.retryAfterSeconds("client-a")).isZero();
+    }
+
+    @Test
+    @DisplayName("replaying one known-good card does not launder a stream of guesses")
+    void replayingTheSameCardEarnsNothing() {
+        EnumerationThrottle throttle = throttleAfter(5);
+
+        // The old reset-on-success rule let this run forever: four guesses, one known-good card,
+        // repeat. Only the first success for the card counts, so the count still climbs.
+        for (int round = 0; round < 5; round++) {
+            for (int i = 0; i < 4; i++) {
+                throttle.recordFailure("client-a");
+            }
+            throttle.recordSuccess("client-a", "known-good-record");
+        }
+        assertThat(throttle.retryAfterSeconds("client-a"))
+                .as("interleaved replays of one card should not hold off the penalty")
+                .isGreaterThan(0);
+    }
+
+    @Test
+    @DisplayName("a success only earns back one failure, it does not clear the count")
+    void successDoesNotResetTheCount() {
         EnumerationThrottle throttle = throttleAfter(5);
 
         for (int i = 0; i < 4; i++) {
             throttle.recordFailure("client-a");
         }
-        throttle.recordSuccess("client-a");
+        throttle.recordSuccess("client-a", "record-1");
 
-        // Four more failures would have tripped it had the run not been cleared.
-        for (int i = 0; i < 4; i++) {
-            throttle.recordFailure("client-a");
-        }
+        // 4 - 1 = 3 net; two more reach the threshold of 5.
+        throttle.recordFailure("client-a");
         assertThat(throttle.retryAfterSeconds("client-a")).isZero();
+        throttle.recordFailure("client-a");
+        assertThat(throttle.retryAfterSeconds("client-a")).isGreaterThan(0);
     }
 
     @Test
