@@ -86,8 +86,9 @@ public class SecurityConfig {
                     // needs a session and turns a missing asset into a confusing bounce.
                     auth.dispatcherTypeMatchers(DispatcherType.ERROR).permitAll();
 
-                    // Branding assets must load on the login page, before a session exists.
-                    auth.requestMatchers("/login", "/css/**", "/img/**", "/favicon.ico").permitAll();
+                    // Styles, the theme script and branding must load on the login page, before a
+                    // session exists.
+                    auth.requestMatchers("/login", "/css/**", "/js/**", "/img/**", "/favicon.ico").permitAll();
                     auth.requestMatchers("/actuator/health", "/actuator/health/**").permitAll();
 
                     // The API contract describes an endpoint over personal data. An operator

@@ -4,25 +4,145 @@
  * and no inline <style> anywhere in the templates.
  */
 
+/* --- Theme tokens --------------------------------------------------------
+   Every colour in this file comes from these tokens. The light set is the default; the dark set
+   applies when the operator picks Dark, or picks System on a device in dark mode. Each pair a
+   page actually draws (text on its background, input borders on cards) is checked against WCAG
+   2.2 AA: 4.5:1 for text, 3:1 for UI boundaries.
+
+   The THEME markers are read by the contrast audit; keep them on the blocks they label.
+   ---------------------------------------------------------------------- */
+
+/* THEME:LIGHT */
 :root {
+    color-scheme: light;
     --ink: #16202b;
     --ink-soft: #55636f;
     --line: #dbe1e8;
+    --field-border: #7a8794;
     --bg: #f4f6f9;
     --surface: #ffffff;
+    --input-bg: #ffffff;
     /* PHLPost navy and red, taken from the corporate mark. */
     --accent: #1b3a6b;
-    --accent-dark: #12294c;
+    --accent-hover: #12294c;
+    --accent-text: #1b3a6b;
+    --on-accent: #ffffff;
+    --focus: #1b3a6b;
     --phl-red: #c8102e;
     --phl-gold: #f5a800;
-    --valid: #1a7f4b;
+    --band-bg: #12294c;
+    --on-band: #ffffff;
+    --valid: #166c40;
     --valid-bg: #e8f6ee;
     --invalid: #b3261e;
     --invalid-bg: #fdecea;
+    --info-ink: #12294c;
+    --info-bg: #eaf1fa;
+    --warn-ink: #7a4f00;
+    --warn-bg: #fff6e0;
+    --verdict-icon-bg: #ffffff;
+    --dagger: #c8102e;
+    /* The card face: a pale three-stop gradient, and its navy header strip. */
+    --face-1: #fdfdfe;
+    --face-2: #eef1f5;
+    --face-3: #e4e9ef;
+    --head-1: #1b3a6b;
+    --head-2: #2b4f88;
+    --head-3: #3a3f45;
+    /* Wells for the photograph, signature and QR stay white in every theme: the signature is
+       black ink and the QR must stay dark-on-light to scan. */
+    --well: #ffffff;
+    --well-border: #c3ccd6;
     --radius: 10px;
 }
 
+/* THEME:DARK
+   Set on <html> by /js/theme.js, which also maps "System" to light or dark before first paint,
+   so this one block serves both an explicit Dark and a dark-mode device. */
+:root[data-theme="dark"] {
+    color-scheme: dark;
+    --ink: #e6ebf1;
+    --ink-soft: #a7b3c1;
+    --line: #2c3846;
+    --field-border: #6e7d8f;
+    --bg: #0e131a;
+    --surface: #171f29;
+    --input-bg: #0f151c;
+    --accent: #2f5ea8;
+    --accent-hover: #3a6cbd;
+    --accent-text: #9cbcf2;
+    --on-accent: #ffffff;
+    --focus: #9cbcf2;
+    --phl-red: #ff6b7d;
+    --phl-gold: #f5a800;
+    --band-bg: #0a1220;
+    --on-band: #ffffff;
+    --valid: #74dca0;
+    --valid-bg: #10291c;
+    --invalid: #ff8f87;
+    --invalid-bg: #2e1614;
+    --info-ink: #bcd3f6;
+    --info-bg: #14233a;
+    --warn-ink: #ffd27a;
+    --warn-bg: #2b2210;
+    --verdict-icon-bg: #0e131a;
+    --dagger: #ff8f9c;
+    --face-1: #1d2733;
+    --face-2: #19212b;
+    --face-3: #151c25;
+    --head-1: #1b3a6b;
+    --head-2: #24467c;
+    --head-3: #2e3339;
+    --well: #ffffff;
+    --well-border: #44515f;
+}
+
+/* The PHLPost and Bagong Pilipinas marks are drawn for a light ground. On dark they sit on a
+   small white plate rather than being recoloured, which would misrepresent both marks. */
+:root[data-theme="dark"] .brand-gov,
+:root[data-theme="dark"] .brand-logo,
+:root[data-theme="dark"] .login-gov,
+:root[data-theme="dark"] .login-logo {
+    background: #ffffff;
+    border-radius: 6px;
+    padding: 3px 6px;
+}
+
+/* The signature is black ink on white. On the dark card face it keeps its white ground. */
+:root[data-theme="dark"] .idcard-signature img {
+    background: var(--well);
+    border-radius: 3px;
+}
+
 * { box-sizing: border-box; }
+
+/* --- Theme switch --- */
+
+.theme-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border: 1px solid var(--field-border);
+    border-radius: 7px;
+    background: transparent;
+    color: var(--ink-soft);
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.theme-toggle:hover { color: var(--ink); border-color: var(--ink-soft); }
+.theme-toggle:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.theme-toggle-icon { font-size: 15px; line-height: 1; }
+
+/* On the sign-in page the switch sits in the corner, clear of the form. */
+.theme-corner { position: fixed; top: 14px; right: 16px; }
+
+@media (max-width: 560px) {
+    .theme-toggle-label { display: none; }
+}
 
 body {
     margin: 0;
@@ -60,7 +180,7 @@ body.centered {
 
 .brand-mark {
     background: var(--accent);
-    color: #fff;
+    color: var(--on-accent);
     font-size: 12px;
     font-weight: 700;
     letter-spacing: .06em;
@@ -69,6 +189,7 @@ body.centered {
 }
 
 
+.header-actions { display: flex; align-items: center; gap: 12px; }
 .logout-form { display: flex; align-items: center; gap: 12px; margin: 0; }
 .operator { color: var(--ink-soft); font-size: 14px; }
 
@@ -111,18 +232,18 @@ input[type="password"],
 input[type="date"] {
     width: 100%;
     padding: 10px 12px;
-    border: 1px solid var(--line);
+    border: 1px solid var(--field-border);
     border-radius: 7px;
     font-size: 15px;
     font-family: inherit;
     color: var(--ink);
-    background: #fff;
+    background: var(--input-bg);
 }
 
 input:focus {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus);
     outline-offset: 1px;
-    border-color: var(--accent);
+    border-color: var(--focus);
 }
 
 #postalRefNo { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; letter-spacing: .04em; }
@@ -144,10 +265,10 @@ input:focus {
     text-decoration: none;
 }
 
-.btn-primary { background: var(--accent); color: #fff; }
-.btn-primary:hover { background: var(--accent-dark); }
+.btn-primary { background: var(--accent); color: var(--on-accent); }
+.btn-primary:hover { background: var(--accent-hover); }
 
-.btn-quiet { background: transparent; color: var(--ink-soft); border-color: var(--line); }
+.btn-quiet { background: transparent; color: var(--ink-soft); border-color: var(--field-border); }
 .btn-quiet:hover { color: var(--ink); border-color: var(--ink-soft); }
 
 /* --- Alerts --- */
@@ -155,7 +276,7 @@ input:focus {
 .alert { padding: 12px 16px; border-radius: 7px; margin-bottom: 20px; font-size: 14px; }
 .alert ul { margin: 6px 0 0; padding-left: 20px; }
 .alert-error { background: var(--invalid-bg); color: var(--invalid); }
-.alert-info { background: #eaf1fa; color: var(--accent-dark); }
+.alert-info { background: var(--info-bg); color: var(--info-ink); }
 
 /* --- Verdict --- */
 
@@ -180,7 +301,7 @@ input:focus {
     align-items: center;
     justify-content: center;
     border-radius: 50%;
-    background: rgba(255, 255, 255, .75);
+    background: var(--verdict-icon-bg);
 }
 
 .verdict-valid { background: var(--valid-bg); color: var(--valid); }
@@ -210,7 +331,7 @@ input:focus {
    ---------------------------------------------------------------------- */
 
 .gov-band {
-    background: var(--accent-dark);
+    background: var(--band-bg);
     color: rgba(255, 255, 255, .88);
     font-size: 12px;
     letter-spacing: .03em;
@@ -238,7 +359,7 @@ input:focus {
     .header-inner { gap: 10px; }
 }
 
-.alert-warn { background: #fff6e0; color: #7a4f00; border-left: 4px solid var(--phl-gold); }
+.alert-warn { background: var(--warn-bg); color: var(--warn-ink); border-left: 4px solid var(--phl-gold); }
 
 .footer-inner { display: flex; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
 .footer-inner p { margin: 0; max-width: 560px; }
@@ -294,7 +415,7 @@ input:focus {
     margin: 0;
     padding: 7px 14px;
     background: var(--accent);
-    color: #fff;
+    color: var(--on-accent);
     font-size: 12px;
     letter-spacing: .02em;
 }
@@ -310,7 +431,7 @@ input:focus {
 }
 
 .idcard {
-    background: linear-gradient(160deg, #fdfdfe 0%, #eef1f5 55%, #e4e9ef 100%);
+    background: linear-gradient(160deg, var(--face-1) 0%, var(--face-2) 55%, var(--face-3) 100%);
     padding: 0 0 18px;
 }
 
@@ -319,7 +440,7 @@ input:focus {
     align-items: center;
     gap: 16px;
     padding: 12px 20px;
-    background: linear-gradient(100deg, #1b3a6b 0%, #2b4f88 55%, #3a3f45 100%);
+    background: linear-gradient(100deg, var(--head-1) 0%, var(--head-2) 55%, var(--head-3) 100%);
     color: #fff;
 }
 
@@ -349,8 +470,8 @@ input:focus {
 .idcard-photo {
     width: 170px;
     height: 210px;
-    border: 1px solid #c3ccd6;
-    background: #fff;
+    border: 1px solid var(--well-border);
+    background: var(--well);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -441,7 +562,7 @@ input:focus {
 .idcard-value.idcard-expired { color: var(--invalid); }
 
 .idcard-derived {
-    color: var(--phl-red);
+    color: var(--dagger);
     font-weight: 700;
     margin-left: 2px;
     cursor: help;
@@ -463,8 +584,8 @@ input:focus {
     width: 104px;
     height: 104px;
     display: block;
-    border: 1px solid #c3ccd6;
-    background: #fff;
+    border: 1px solid var(--well-border);
+    background: var(--well);
 }
 
 .idcard-qr-caption {
@@ -511,14 +632,14 @@ input:focus {
     font-size: 20px;
     font-weight: 700;
     letter-spacing: .04em;
-    color: var(--accent);
+    color: var(--accent-text);
 }
 
 .app-name {
     font-size: 30px;
     font-weight: 700;
     letter-spacing: .14em;
-    color: var(--accent);
+    color: var(--accent-text);
     margin: 0 0 4px;
 }
 

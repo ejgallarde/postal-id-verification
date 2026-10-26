@@ -186,6 +186,23 @@ class VerificationUiIntegrationTest {
     }
 
     @Test
+    @DisplayName("the theme switch loads before sign-in, from this origin, without loosening the CSP")
+    void themeSwitchWorksUnderTheCsp() throws Exception {
+        mockMvc.perform(get("/js/theme.js"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/login"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("src=\"/js/theme.js\"")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("data-theme-toggle")))
+                // Same-origin script only: no inline script, so no 'unsafe-inline' needed.
+                .andExpect(header().string("Content-Security-Policy",
+                        org.hamcrest.Matchers.containsString("script-src 'self';")))
+                .andExpect(header().string("Content-Security-Policy",
+                        org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("unsafe-inline"))));
+    }
+
+    @Test
     @DisplayName("the console image route is not open to anonymous callers")
     void imageRouteRequiresSignIn() throws Exception {
         mockMvc.perform(get("/ui/images/anything"))

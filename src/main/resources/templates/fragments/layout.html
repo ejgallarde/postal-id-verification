@@ -10,7 +10,11 @@
   <!-- Result pages name a specific person; keep them out of history caches. -->
   <meta http-equiv="Cache-Control" content="no-store">
   <title th:text="${title} + ' · PIVOT'">PIVOT</title>
+  <!-- Light/dark colour scheme hint for form controls and scrollbars before CSS loads. -->
+  <meta name="color-scheme" content="light dark">
   <link rel="stylesheet" th:href="@{/css/app.css}">
+  <!-- Synchronous on purpose: applies the theme before first paint, so no light flash. -->
+  <script th:src="@{/js/theme.js}"></script>
 </head>
 
 <body>
@@ -42,13 +46,22 @@
         <span class="brand-full">PHLPost Identity Verification &amp; Onboarding Toolkit</span>
       </span>
     </a>
-    <form th:action="@{/logout}" method="post" class="logout-form"
-          th:if="${#authorization.expression('isAuthenticated()')}">
-      <span class="operator" th:text="${#authentication.name}">operator</span>
-      <button type="submit" class="btn btn-quiet">Sign out</button>
-    </form>
+    <div class="header-actions">
+      <button th:replace="~{fragments/layout :: themeToggle}"></button>
+      <form th:action="@{/logout}" method="post" class="logout-form"
+            th:if="${#authorization.expression('isAuthenticated()')}">
+        <span class="operator" th:text="${#authentication.name}">operator</span>
+        <button type="submit" class="btn btn-quiet">Sign out</button>
+      </form>
+    </div>
   </div>
 </header>
+
+<!-- Hidden until /js/theme.js labels it and wires it up, so it never appears inert. -->
+<button th:fragment="themeToggle" type="button" class="theme-toggle" data-theme-toggle hidden>
+  <span class="theme-toggle-icon" aria-hidden="true">&#x25D0;</span>
+  <span class="theme-toggle-label">Theme: System</span>
+</button>
 
 <footer th:fragment="footer" class="site-footer">
   <div class="wrap footer-inner">
